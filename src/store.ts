@@ -148,6 +148,7 @@ interface AppState {
   // phrase-template "brush" used when clicking the piano roll
   templates: PhraseTemplate[];
   activeBrush: string | null; // template id, or null = single note
+  snapToScale: boolean; // remap stamped phrases into the brick's key
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -187,8 +188,10 @@ interface AppState {
 
   // phrase templates
   addTemplate: (name: string, notes: PhraseTemplate['notes']) => string;
+  renameTemplate: (id: string, name: string) => void;
   deleteTemplate: (id: string) => void;
   setActiveBrush: (id: string | null) => void;
+  setSnapToScale: (v: boolean) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -203,6 +206,7 @@ export const useStore = create<AppState>()(
       linking: null,
       templates: [],
       activeBrush: null,
+      snapToScale: false,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -446,6 +450,13 @@ export const useStore = create<AppState>()(
         return tpl.id;
       },
 
+      renameTemplate: (id, name) =>
+        set((s) => ({
+          templates: s.templates.map((t) =>
+            t.id === id ? { ...t, name } : t
+          ),
+        })),
+
       deleteTemplate: (id) =>
         set((s) => ({
           templates: s.templates.filter((t) => t.id !== id),
@@ -453,6 +464,7 @@ export const useStore = create<AppState>()(
         })),
 
       setActiveBrush: (id) => set({ activeBrush: id }),
+      setSnapToScale: (v) => set({ snapToScale: v }),
     }),
     {
       name: 'music-composition-suite',
@@ -502,6 +514,7 @@ export const useStore = create<AppState>()(
         activeMixId: s.activeMixId,
         templates: s.templates,
         activeBrush: s.activeBrush,
+        snapToScale: s.snapToScale,
       }),
     }
   )

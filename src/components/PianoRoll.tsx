@@ -62,7 +62,11 @@ export function PianoRoll({
   const activeBrush = useStore((s) => s.activeBrush);
   const setActiveBrush = useStore((s) => s.setActiveBrush);
   const addTemplate = useStore((s) => s.addTemplate);
+  const renameTemplate = useStore((s) => s.renameTemplate);
   const deleteTemplate = useStore((s) => s.deleteTemplate);
+  const snapToScale = useStore((s) => s.snapToScale);
+  const setSnapToScale = useStore((s) => s.setSnapToScale);
+  const activeTemplate = templates.find((t) => t.id === activeBrush) ?? null;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
@@ -72,6 +76,7 @@ export function PianoRoll({
   const dragRef = useRef<Drag>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const velSvgRef = useRef<SVGSVGElement | null>(null);
+  const renameRef = useRef<HTMLInputElement | null>(null);
   const rollRef = useRef<HTMLDivElement | null>(null);
   const velRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef(false);
@@ -196,14 +201,24 @@ export function PianoRoll({
               ? st.templates.find((t) => t.id === st.activeBrush)
               : null;
             if (tpl && tpl.notes.length) {
+              const b2 = st.bricks.find((x) => x.id === brick.id);
+              const set =
+                st.snapToScale && b2 ? scalePitchClasses(b2.key) : null;
               st.addNotes(
                 brick.id,
-                tpl.notes.map((n) => ({
-                  pitch: Math.max(PITCH_LOW, Math.min(PITCH_HIGH, d.startPitch + n.dp)),
-                  start: Math.max(0, start + n.start),
-                  duration: n.duration,
-                  velocity: n.velocity,
-                }))
+                tpl.notes.map((n) => {
+                  let p = Math.max(
+                    PITCH_LOW,
+                    Math.min(PITCH_HIGH, d.startPitch + n.dp)
+                  );
+                  if (set) p = nearestInScale(p, set);
+                  return {
+                    pitch: p,
+                    start: Math.max(0, start + n.start),
+                    duration: n.duration,
+                    velocity: n.velocity,
+                  };
+                })
               );
             } else {
               addNote(brick.id, {
@@ -325,24 +340,22 @@ export function PianoRoll({
     window.addEventListener('pointerup', up);
   }
 
-  function saveSelectionAsPhrase() {
-    const sel = brick!.notes.filter((n) => selected.has(n.id));
-    if (sel.length === 0) return;
-    const minStart = Math.min(...sel.map((n) => n.start));
+  function savePhrase(source: Note[]) {
+    if (source.length === 0) return;
+    const minStart = Math.min(...source.map((n) => n.start));
     // anchor = earliest note (ties broken by lowest pitch)
-    const anchor = sel.reduce((a, b) =>
+    const anchor = source.reduce((a, b) =>
       b.start < a.start || (b.start === a.start && b.pitch < a.pitch) ? b : a
     );
-    const notes = sel.map((n) => ({
+    const notes = source.map((n) => ({
       dp: n.pitch - anchor.pitch,
       start: n.start - minStart,
       duration: n.duration,
       velocity: n.velocity,
     }));
-    const fallback = `Phrase ${templates.length + 1}`;
-    const name = window.prompt('Name this phrase', fallback);
-    if (name === null) return;
-    addTemplate(name.trim() || fallback, notes);
+    addTemplate(`Phrase ${templates.length + 1}`, notes);
+    // focus the inline rename field instead of a browser prompt
+    requestAnimationFrame(() => renameRef.current?.select());
   }
 
   const rows = [];
@@ -376,23 +389,49 @@ export function PianoRoll({
           ))}
         </select>
       </label>
+      {activeTemplate && (
+        <>
+          <input
+            ref={renameRef}
+            className="brush-rename"
+            value={activeTemplate.name}
+            onChange={(e) => renameTemplate(activeTemplate.id, e.target.value)}
+            title="Rename phrase"
+          />
+          <button
+            className="ghost-btn brush-btn"
+            title="Delete this phrase"
+            onClick={() => deleteTemplate(activeTemplate.id)}
+          >
+            🗑
+          </button>
+          <label className="brush-check" title="Remap stamped phrases into the brick's key">
+            <input
+              type="checkbox"
+              checked={snapToScale}
+              onChange={(e) => setSnapToScale(e.target.checked)}
+            />
+            Snap to scale
+          </label>
+        </>
+      )}
+      <span className="brush-spacer" />
       <button
         className="ghost-btn brush-btn"
         disabled={selected.size === 0}
-        onClick={saveSelectionAsPhrase}
+        onClick={() => savePhrase(brick.notes.filter((n) => selected.has(n.id)))}
         title="Turn the selected notes into a reusable phrase brush"
       >
-        ＋ Save selection as phrase
+        ＋ Selection
       </button>
-      {activeBrush && (
-        <button
-          className="ghost-btn brush-btn"
-          title="Delete this phrase"
-          onClick={() => deleteTemplate(activeBrush)}
-        >
-          🗑
-        </button>
-      )}
+      <button
+        className="ghost-btn brush-btn"
+        disabled={brick.notes.length === 0}
+        onClick={() => savePhrase(brick.notes)}
+        title="Turn this whole brick into a phrase brush"
+      >
+        ＋ From brick
+      </button>
     </div>
     <div
       className="roll-scroll"
@@ -588,6 +627,18 @@ export function PianoRoll({
 /** Paint order: plain notes (0) below, hovered/selected notes (1) on top. */
 function rank(n: Note, selected: Set<string>, hovered: string | null): number {
   return selected.has(n.id) || hovered === n.id ? 1 : 0;
+}
+
+/** Nearest MIDI pitch whose pitch-class is in the scale (searches out ±). */
+function nearestInScale(pitch: number, set: Set<number>): number {
+  for (let d = 0; d < 12; d++) {
+    for (const s of d === 0 ? [0] : [d, -d]) {
+      const p = pitch + s;
+      if (p >= PITCH_LOW && p <= PITCH_HIGH && set.has(((p % 12) + 12) % 12))
+        return p;
+    }
+  }
+  return pitch;
 }
 
 function normRect(r: Rect): Rect {

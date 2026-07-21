@@ -43,8 +43,17 @@ export function Board() {
 
   const empty = bricks.length === 0 && mixes.length === 0;
 
+  function onBoardDoubleClick(e: React.MouseEvent) {
+    if (e.target !== e.currentTarget) return; // only empty board space
+    const el = e.currentTarget as HTMLDivElement;
+    const r = el.getBoundingClientRect();
+    const x = Math.max(0, e.clientX - r.left + el.scrollLeft - CARD_W / 2);
+    const y = Math.max(0, e.clientY - r.top + el.scrollTop - 10);
+    addBrick({ board: { x, y, rotation: (Math.random() - 0.5) * 4 } });
+  }
+
   return (
-    <div className="board">
+    <div className="board" onDoubleClick={onBoardDoubleClick}>
       {empty && (
         <div className="board-empty">
           <h2>Your corkboard is empty</h2>
