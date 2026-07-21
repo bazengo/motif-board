@@ -6,10 +6,12 @@ import { CARD_W, MIX_W, MIX_H } from '../layout';
 export function Board() {
   const bricks = useStore((s) => s.bricks);
   const mixes = useStore((s) => s.mixes);
+  const linking = useStore((s) => s.linking);
   const addBrick = useStore((s) => s.addBrick);
   const openEditor = useStore((s) => s.openEditor);
 
   const byId = new Map(bricks.map((b) => [b.id, b]));
+  const linkingBrick = linking ? byId.get(linking.brickId) : undefined;
 
   // lineage edges (dashed) — parent -> child
   const lineage = bricks
@@ -33,6 +35,10 @@ export function Board() {
   for (const m of mixes) {
     maxX = Math.max(maxX, m.board.x + MIX_W + 120);
     maxY = Math.max(maxY, m.board.y + MIX_H + 120);
+  }
+  if (linking) {
+    maxX = Math.max(maxX, linking.x + 40);
+    maxY = Math.max(maxY, linking.y + 40);
   }
 
   const empty = bricks.length === 0 && mixes.length === 0;
@@ -59,8 +65,19 @@ export function Board() {
         </div>
       )}
 
-      {(lineage.length > 0 || mixEdges.length > 0) && (
+      {(lineage.length > 0 || mixEdges.length > 0 || linking) && (
         <svg className="board-links" width={maxX} height={maxY}>
+          {linking && linkingBrick && (
+            <line
+              x1={linkingBrick.board.x + CARD_W / 2}
+              y1={linkingBrick.board.y + 20}
+              x2={linking.x}
+              y2={linking.y}
+              stroke="#ffd166"
+              strokeWidth={2.5}
+              strokeDasharray="6 4"
+            />
+          )}
           {mixEdges.map(({ brick, mix }) => {
             const bx = brick.board.x + CARD_W / 2;
             const by = brick.board.y + 20;

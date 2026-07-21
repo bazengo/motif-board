@@ -142,6 +142,8 @@ interface AppState {
   globalBpm: number;
   mixes: Mix[];
   activeMixId: string | null;
+  // transient: an in-progress "drag to connect" from a brick to the cursor
+  linking: { brickId: string; x: number; y: number } | null;
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -176,6 +178,7 @@ interface AppState {
   setActiveMix: (mixId: string | null) => void;
   toggleBrickInMix: (mixId: string, brickId: string) => void;
   updateLayer: (mixId: string, brickId: string, patch: Partial<MixLayer>) => void;
+  setLinking: (v: { brickId: string; x: number; y: number } | null) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -187,6 +190,7 @@ export const useStore = create<AppState>()(
       globalBpm: 120,
       mixes: [],
       activeMixId: null,
+      linking: null,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -403,6 +407,8 @@ export const useStore = create<AppState>()(
               : mx
           ),
         })),
+
+      setLinking: (v) => set({ linking: v }),
     }),
     {
       name: 'music-composition-suite',

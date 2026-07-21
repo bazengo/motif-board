@@ -3,7 +3,7 @@ import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
-import { CARD_W, MIX_W, MIX_H } from '../layout';
+import { MIX_W, MIX_H } from '../layout';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -35,24 +35,52 @@ export function BrickCard({ brick }: { brick: Brick }) {
     (e.target as Element).setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) =>
       moveBrick(brick.id, Math.max(0, ev.clientX - dx), Math.max(0, ev.clientY - dy));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  // Dedicated "drag to a mix" handle: draws a live line to the cursor and
+  // connects to whatever mix node it's dropped on. Doesn't move the card.
+  function onLinkDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const board = document.querySelector('.board') as HTMLElement | null;
+    const toContent = (ev: PointerEvent | React.PointerEvent) => {
+      const r = board!.getBoundingClientRect();
+      return {
+        x: ev.clientX - r.left + board!.scrollLeft,
+        y: ev.clientY - r.top + board!.scrollTop,
+      };
+    };
+    const { setLinking, toggleBrickInMix: join } = useStore.getState();
+    const p0 = toContent(e);
+    setLinking({ brickId: brick.id, x: p0.x, y: p0.y });
+    const move = (ev: PointerEvent) => {
+      const p = toContent(ev);
+      setLinking({ brickId: brick.id, x: p.x, y: p.y });
+    };
     const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-      // Drag-to-connect: if dropped over a mix node, join that mix.
-      const cx = ev.clientX - dx + CARD_W / 2;
-      const cy = ev.clientY - dy + 20;
-      const { mixes: mxs, toggleBrickInMix: join } = useStore.getState();
+      const p = toContent(ev);
+      const { mixes: mxs } = useStore.getState();
       for (const m of mxs) {
         if (
-          cx >= m.board.x &&
-          cx <= m.board.x + MIX_W &&
-          cy >= m.board.y &&
-          cy <= m.board.y + MIX_H
+          p.x >= m.board.x &&
+          p.x <= m.board.x + MIX_W &&
+          p.y >= m.board.y &&
+          p.y <= m.board.y + MIX_H
         ) {
           if (!m.layers.some((l) => l.brickId === brick.id)) join(m.id, brick.id);
           break;
         }
       }
+      useStore.getState().setLinking(null);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -64,6 +92,12 @@ export function BrickCard({ brick }: { brick: Brick }) {
     .getState()
     .bricks.filter((b) => b.id !== brick.id && !descendants.has(b.id));
 
+  // Un-rotate menus so they read vertically even on a tilted card.
+  const menuStyle: React.CSSProperties = {
+    transform: `rotate(${-brick.board.rotation}deg)`,
+    transformOrigin: 'top right',
+  };
+
   return (
     <div
       className="brick-card"
@@ -73,22 +107,40 @@ export function BrickCard({ brick }: { brick: Brick }) {
         top: brick.board.y,
         transform: `rotate(${brick.board.rotation}deg)`,
         background: brick.color,
+        zIndex: menu ? 30 : undefined,
       }}
     >
-      <div className="brick-handle" onPointerDown={onHandleDown} title="Drag to move (drop on a mix to add)">
+      <div className="brick-handle" onPointerDown={onHandleDown} title="Drag to move">
         <span className="brick-grip">⠿</span>
         <div className="brick-handle-actions">
-          <button className="icon-btn" title="Play" onClick={() => engine.playBrick(brick)}>
+          <button
+            className="icon-btn link-handle"
+            title="Drag onto a mix node to add this brick"
+            onPointerDown={onLinkDown}
+          >
+            ⇢
+          </button>
+          <button
+            className="icon-btn"
+            title="Play"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => engine.playBrick(brick)}
+          >
             ▶
           </button>
-          <button className="icon-btn" title="More" onClick={() => setMenu((v) => (v ? null : 'main'))}>
+          <button
+            className="icon-btn"
+            title="More"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setMenu((v) => (v ? null : 'main'))}
+          >
             ⋯
           </button>
         </div>
       </div>
 
       {menu === 'main' && (
-        <div className="brick-menu" onMouseLeave={() => setMenu(null)}>
+        <div className="brick-menu" style={menuStyle} onMouseLeave={() => setMenu(null)}>
           <div className="swatch-row">
             {STICKY_COLORS.map((c) => (
               <button
@@ -144,7 +196,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
       )}
 
       {menu === 'mix' && (
-        <div className="brick-menu" onMouseLeave={() => setMenu(null)}>
+        <div className="brick-menu" style={menuStyle} onMouseLeave={() => setMenu(null)}>
           <div className="menu-section">Add to mix</div>
           {mixes.length === 0 && <div className="menu-empty">No mixes yet — make one on the board.</div>}
           {mixes.map((m) => (
@@ -164,7 +216,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
       )}
 
       {menu === 'parent' && (
-        <div className="brick-menu" onMouseLeave={() => setMenu(null)}>
+        <div className="brick-menu" style={menuStyle} onMouseLeave={() => setMenu(null)}>
           <div className="menu-section">Lineage parent</div>
           <button onClick={() => { setParent(brick.id, null); setMenu(null); }}>
             ⛌ Orphan (make root)
