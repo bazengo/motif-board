@@ -49,6 +49,16 @@ export const DEFAULT_DISPLAY: BrickDisplay = {
   preview: false,
 };
 
+/** A reusable musical phrase used as the piano-roll "brush". Notes are stored
+ *  relative to an anchor (the earliest note): `dp` = semitone offset from the
+ *  anchor pitch, `start` = beat offset from the anchor start. Stamping at a
+ *  clicked (pitch, beat) places the anchor there and the rest follow. */
+export interface PhraseTemplate {
+  id: string;
+  name: string;
+  notes: { dp: number; start: number; duration: number; velocity: number }[];
+}
+
 export interface Brick {
   id: string;
   name: string;

@@ -1,22 +1,24 @@
 import { useStore } from '../store';
-import type { Brick, Mix } from '../types';
+import type { Brick, Mix, PhraseTemplate } from '../types';
 
 interface ProjectFile {
   app: 'motif-board';
-  version: 2;
+  version: 3;
   bricks: Brick[];
   mixes: Mix[];
   globalBpm: number;
+  templates: PhraseTemplate[];
 }
 
 export function exportProject(filename = 'motif-board-project.json') {
   const s = useStore.getState();
   const data: ProjectFile = {
     app: 'motif-board',
-    version: 2,
+    version: 3,
     bricks: s.bricks,
     mixes: s.mixes,
     globalBpm: s.globalBpm,
+    templates: s.templates,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: 'application/json',
@@ -41,6 +43,8 @@ export async function importProject(file: File): Promise<void> {
     bricks: data.bricks,
     mixes: data.mixes ?? [],
     globalBpm: data.globalBpm ?? 120,
+    templates: data.templates ?? [],
+    activeBrush: null,
     activeMixId: data.mixes?.[0]?.id ?? null,
     selectedBrickId: null,
     editorOpen: false,

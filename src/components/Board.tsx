@@ -73,7 +73,7 @@ export function Board() {
               y1={linkingBrick.board.y + 20}
               x2={linking.x}
               y2={linking.y}
-              stroke="#ffd166"
+              stroke="#7bdff2"
               strokeWidth={2.5}
               strokeDasharray="6 4"
             />

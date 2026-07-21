@@ -6,6 +6,7 @@ import {
   type Mix,
   type MixLayer,
   type Note,
+  type PhraseTemplate,
   type InstrumentId,
   STICKY_COLORS,
   MIX_COLORS,
@@ -144,6 +145,9 @@ interface AppState {
   activeMixId: string | null;
   // transient: an in-progress "drag to connect" from a brick to the cursor
   linking: { brickId: string; x: number; y: number } | null;
+  // phrase-template "brush" used when clicking the piano roll
+  templates: PhraseTemplate[];
+  activeBrush: string | null; // template id, or null = single note
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -161,6 +165,7 @@ interface AppState {
   // notes within a brick
   setNotes: (brickId: string, notes: Note[]) => void;
   addNote: (brickId: string, note: Omit<Note, 'id'>) => void;
+  addNotes: (brickId: string, notes: Omit<Note, 'id'>[]) => void;
   updateNote: (brickId: string, noteId: string, patch: Partial<Note>) => void;
   updateNotesBatch: (
     brickId: string,
@@ -179,6 +184,11 @@ interface AppState {
   toggleBrickInMix: (mixId: string, brickId: string) => void;
   updateLayer: (mixId: string, brickId: string, patch: Partial<MixLayer>) => void;
   setLinking: (v: { brickId: string; x: number; y: number } | null) => void;
+
+  // phrase templates
+  addTemplate: (name: string, notes: PhraseTemplate['notes']) => string;
+  deleteTemplate: (id: string) => void;
+  setActiveBrush: (id: string | null) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -191,6 +201,8 @@ export const useStore = create<AppState>()(
       mixes: [],
       activeMixId: null,
       linking: null,
+      templates: [],
+      activeBrush: null,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -281,6 +293,21 @@ export const useStore = create<AppState>()(
           bricks: s.bricks.map((b) =>
             b.id === brickId
               ? { ...b, notes: [...b.notes, { ...note, id: nanoid(8) }] }
+              : b
+          ),
+        })),
+
+      addNotes: (brickId, notes) =>
+        set((s) => ({
+          bricks: s.bricks.map((b) =>
+            b.id === brickId
+              ? {
+                  ...b,
+                  notes: [
+                    ...b.notes,
+                    ...notes.map((n) => ({ ...n, id: nanoid(8) })),
+                  ],
+                }
               : b
           ),
         })),
@@ -409,13 +436,37 @@ export const useStore = create<AppState>()(
         })),
 
       setLinking: (v) => set({ linking: v }),
+
+      addTemplate: (name, notes) => {
+        const tpl: PhraseTemplate = { id: nanoid(8), name, notes };
+        set((s) => ({
+          templates: [...s.templates, tpl],
+          activeBrush: tpl.id,
+        }));
+        return tpl.id;
+      },
+
+      deleteTemplate: (id) =>
+        set((s) => ({
+          templates: s.templates.filter((t) => t.id !== id),
+          activeBrush: s.activeBrush === id ? null : s.activeBrush,
+        })),
+
+      setActiveBrush: (id) => set({ activeBrush: id }),
     }),
     {
       name: 'music-composition-suite',
-      version: 2,
+      version: 3,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
-          | { bricks?: Brick[]; mix?: MixLayer[]; mixes?: Mix[]; activeMixId?: string | null }
+          | {
+              bricks?: Brick[];
+              mix?: MixLayer[];
+              mixes?: Mix[];
+              activeMixId?: string | null;
+              templates?: PhraseTemplate[];
+              activeBrush?: string | null;
+            }
           | undefined;
         if (!state) return state as never;
         // v0/v1 -> add brick fields
@@ -437,6 +488,11 @@ export const useStore = create<AppState>()(
           }
           delete state.mix;
         }
+        // v2 -> v3: phrase templates
+        if (version < 3) {
+          state.templates = state.templates ?? [];
+          state.activeBrush = null;
+        }
         return state as never;
       },
       partialize: (s) => ({
@@ -444,6 +500,8 @@ export const useStore = create<AppState>()(
         globalBpm: s.globalBpm,
         mixes: s.mixes,
         activeMixId: s.activeMixId,
+        templates: s.templates,
+        activeBrush: s.activeBrush,
       }),
     }
   )

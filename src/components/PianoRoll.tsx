@@ -58,6 +58,11 @@ export function PianoRoll({
   const updateNotesBatch = useStore((s) => s.updateNotesBatch);
   const removeNote = useStore((s) => s.removeNote);
   const removeNotes = useStore((s) => s.removeNotes);
+  const templates = useStore((s) => s.templates);
+  const activeBrush = useStore((s) => s.activeBrush);
+  const setActiveBrush = useStore((s) => s.setActiveBrush);
+  const addTemplate = useStore((s) => s.addTemplate);
+  const deleteTemplate = useStore((s) => s.deleteTemplate);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
@@ -183,15 +188,31 @@ export function PianoRoll({
             return next;
           });
         } else {
-          // plain click on empty grid -> add a note
+          // plain click on empty grid -> stamp the active brush (phrase or note)
           const start = Math.max(0, d.startBeat);
           if (d.startPitch >= PITCH_LOW && d.startPitch <= PITCH_HIGH) {
-            addNote(brick.id, {
-              pitch: d.startPitch,
-              start,
-              duration: lastDur,
-              velocity: 0.8,
-            });
+            const st = useStore.getState();
+            const tpl = st.activeBrush
+              ? st.templates.find((t) => t.id === st.activeBrush)
+              : null;
+            if (tpl && tpl.notes.length) {
+              st.addNotes(
+                brick.id,
+                tpl.notes.map((n) => ({
+                  pitch: Math.max(PITCH_LOW, Math.min(PITCH_HIGH, d.startPitch + n.dp)),
+                  start: Math.max(0, start + n.start),
+                  duration: n.duration,
+                  velocity: n.velocity,
+                }))
+              );
+            } else {
+              addNote(brick.id, {
+                pitch: d.startPitch,
+                start,
+                duration: lastDur,
+                velocity: 0.8,
+              });
+            }
             if (audition) engine.preview(d.startPitch, brick.instrument);
             setSelected(new Set());
           }
@@ -304,6 +325,26 @@ export function PianoRoll({
     window.addEventListener('pointerup', up);
   }
 
+  function saveSelectionAsPhrase() {
+    const sel = brick!.notes.filter((n) => selected.has(n.id));
+    if (sel.length === 0) return;
+    const minStart = Math.min(...sel.map((n) => n.start));
+    // anchor = earliest note (ties broken by lowest pitch)
+    const anchor = sel.reduce((a, b) =>
+      b.start < a.start || (b.start === a.start && b.pitch < a.pitch) ? b : a
+    );
+    const notes = sel.map((n) => ({
+      dp: n.pitch - anchor.pitch,
+      start: n.start - minStart,
+      duration: n.duration,
+      velocity: n.velocity,
+    }));
+    const fallback = `Phrase ${templates.length + 1}`;
+    const name = window.prompt('Name this phrase', fallback);
+    if (name === null) return;
+    addTemplate(name.trim() || fallback, notes);
+  }
+
   const rows = [];
   for (let i = 0; i < rowCount; i++) {
     const pitch = PITCH_HIGH - i;
@@ -320,6 +361,39 @@ export function PianoRoll({
 
   return (
     <div className="roll-with-vel">
+    <div className="roll-brushbar">
+      <label className="brush-field">
+        Brush
+        <select
+          value={activeBrush ?? ''}
+          onChange={(e) => setActiveBrush(e.target.value || null)}
+        >
+          <option value="">Single note</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} ({t.notes.length})
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="ghost-btn brush-btn"
+        disabled={selected.size === 0}
+        onClick={saveSelectionAsPhrase}
+        title="Turn the selected notes into a reusable phrase brush"
+      >
+        ＋ Save selection as phrase
+      </button>
+      {activeBrush && (
+        <button
+          className="ghost-btn brush-btn"
+          title="Delete this phrase"
+          onClick={() => deleteTemplate(activeBrush)}
+        >
+          🗑
+        </button>
+      )}
+    </div>
     <div
       className="roll-scroll"
       tabIndex={0}

@@ -817,6 +817,34 @@
   flex-shrink: 0;
 }
 
+/* ---------- Phrase brush bar ---------- */
+.roll-brushbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.brush-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9aa3b2;
+}
+.brush-field select {
+  background: #12151b;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-size: 13px;
+}
+.brush-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 /* ---------- Velocity lane ---------- */
 .vel-lane {
   display: flex;
