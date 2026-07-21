@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useStore } from '../store';
+import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
+import { CARD_W, MIX_W, MIX_H } from '../layout';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -11,13 +12,17 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const deleteBrick = useStore((s) => s.deleteBrick);
   const duplicateBrick = useStore((s) => s.duplicateBrick);
   const branchBrick = useStore((s) => s.branchBrick);
+  const setParent = useStore((s) => s.setParent);
   const moveBrick = useStore((s) => s.moveBrick);
   const openEditor = useStore((s) => s.openEditor);
-  const inMix = useStore((s) => s.mix.some((m) => m.brickId === brick.id));
-  const toggleInMix = useStore((s) => s.toggleInMix);
+  const mixes = useStore((s) => s.mixes);
+  const toggleBrickInMix = useStore((s) => s.toggleBrickInMix);
 
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menu, setMenu] = useState<null | 'main' | 'mix' | 'parent'>(null);
   const d = brick.display;
+  const memberMixIds = mixes.filter((m) =>
+    m.layers.some((l) => l.brickId === brick.id)
+  );
 
   function setDisplay(patch: Partial<BrickDisplay>) {
     updateBrick(brick.id, { display: { ...brick.display, ...patch } });
@@ -30,13 +35,34 @@ export function BrickCard({ brick }: { brick: Brick }) {
     (e.target as Element).setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) =>
       moveBrick(brick.id, Math.max(0, ev.clientX - dx), Math.max(0, ev.clientY - dy));
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      // Drag-to-connect: if dropped over a mix node, join that mix.
+      const cx = ev.clientX - dx + CARD_W / 2;
+      const cy = ev.clientY - dy + 20;
+      const { mixes: mxs, toggleBrickInMix: join } = useStore.getState();
+      for (const m of mxs) {
+        if (
+          cx >= m.board.x &&
+          cx <= m.board.x + MIX_W &&
+          cy >= m.board.y &&
+          cy <= m.board.y + MIX_H
+        ) {
+          if (!m.layers.some((l) => l.brickId === brick.id)) join(m.id, brick.id);
+          break;
+        }
+      }
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }
+
+  // eligible new parents: not self, not a descendant (avoid cycles)
+  const descendants = descendantIds(useStore.getState().bricks, brick.id);
+  const parentCandidates = useStore
+    .getState()
+    .bricks.filter((b) => b.id !== brick.id && !descendants.has(b.id));
 
   return (
     <div
@@ -49,20 +75,20 @@ export function BrickCard({ brick }: { brick: Brick }) {
         background: brick.color,
       }}
     >
-      <div className="brick-handle" onPointerDown={onHandleDown} title="Drag to move">
+      <div className="brick-handle" onPointerDown={onHandleDown} title="Drag to move (drop on a mix to add)">
         <span className="brick-grip">⠿</span>
         <div className="brick-handle-actions">
           <button className="icon-btn" title="Play" onClick={() => engine.playBrick(brick)}>
             ▶
           </button>
-          <button className="icon-btn" title="More" onClick={() => setMenuOpen((v) => !v)}>
+          <button className="icon-btn" title="More" onClick={() => setMenu((v) => (v ? null : 'main'))}>
             ⋯
           </button>
         </div>
       </div>
 
-      {menuOpen && (
-        <div className="brick-menu" onMouseLeave={() => setMenuOpen(false)}>
+      {menu === 'main' && (
+        <div className="brick-menu" onMouseLeave={() => setMenu(null)}>
           <div className="swatch-row">
             {STICKY_COLORS.map((c) => (
               <button
@@ -75,58 +101,89 @@ export function BrickCard({ brick }: { brick: Brick }) {
           </div>
 
           <div className="menu-section">Card shows</div>
-          <label className="menu-check">
-            <input
-              type="checkbox"
-              checked={d.showChords}
-              onChange={(e) => setDisplay({ showChords: e.target.checked })}
-            />
-            Chords
-          </label>
-          <label className="menu-check">
-            <input
-              type="checkbox"
-              checked={d.showLyrics}
-              onChange={(e) => setDisplay({ showLyrics: e.target.checked })}
-            />
-            Lyrics
-          </label>
-          <label className="menu-check">
-            <input
-              type="checkbox"
-              checked={d.showNotes}
-              onChange={(e) => setDisplay({ showNotes: e.target.checked })}
-            />
-            Description
-          </label>
-          <label className="menu-check">
-            <input
-              type="checkbox"
-              checked={d.preview}
-              onChange={(e) => setDisplay({ preview: e.target.checked })}
-            />
-            Piano-roll preview
-          </label>
+          {(
+            [
+              ['showChords', 'Chords'],
+              ['showLyrics', 'Lyrics'],
+              ['showNotes', 'Description'],
+              ['preview', 'Piano-roll preview'],
+            ] as [keyof BrickDisplay, string][]
+          ).map(([key, label]) => (
+            <label className="menu-check" key={key}>
+              <input
+                type="checkbox"
+                checked={d[key]}
+                onChange={(e) => setDisplay({ [key]: e.target.checked })}
+              />
+              {label}
+            </label>
+          ))}
 
           <div className="menu-divider" />
+          <button onClick={() => setMenu('mix')}>➕ Add to mix ▸</button>
+          <button onClick={() => setMenu('parent')}>🌱 Lineage ▸</button>
           <button
             onClick={() => {
               const id = branchBrick(brick.id);
-              setMenuOpen(false);
+              setMenu(null);
               if (id) openEditor(id);
             }}
           >
-            🌱 Branch (new iteration)
+            Branch (new iteration)
           </button>
-          <button onClick={() => { duplicateBrick(brick.id); setMenuOpen(false); }}>
+          <button onClick={() => { duplicateBrick(brick.id); setMenu(null); }}>
             Duplicate
           </button>
-          <button onClick={() => { exportBrick(brick); setMenuOpen(false); }}>
+          <button onClick={() => { exportBrick(brick); setMenu(null); }}>
             Export MIDI
           </button>
           <button className="danger" onClick={() => deleteBrick(brick.id)}>
             Delete
           </button>
+        </div>
+      )}
+
+      {menu === 'mix' && (
+        <div className="brick-menu" onMouseLeave={() => setMenu(null)}>
+          <div className="menu-section">Add to mix</div>
+          {mixes.length === 0 && <div className="menu-empty">No mixes yet — make one on the board.</div>}
+          {mixes.map((m) => (
+            <label className="menu-check" key={m.id}>
+              <input
+                type="checkbox"
+                checked={m.layers.some((l) => l.brickId === brick.id)}
+                onChange={() => toggleBrickInMix(m.id, brick.id)}
+              />
+              <span className="mix-swatch" style={{ background: m.color }} />
+              {m.name}
+            </label>
+          ))}
+          <div className="menu-divider" />
+          <button onClick={() => setMenu('main')}>‹ Back</button>
+        </div>
+      )}
+
+      {menu === 'parent' && (
+        <div className="brick-menu" onMouseLeave={() => setMenu(null)}>
+          <div className="menu-section">Lineage parent</div>
+          <button onClick={() => { setParent(brick.id, null); setMenu(null); }}>
+            ⛌ Orphan (make root)
+          </button>
+          <div className="menu-divider" />
+          <div className="menu-scroll">
+            {parentCandidates.length === 0 && <div className="menu-empty">No other bricks.</div>}
+            {parentCandidates.map((b) => (
+              <button
+                key={b.id}
+                className={brick.parentId === b.id ? 'on' : ''}
+                onClick={() => { setParent(brick.id, b.id); setMenu(null); }}
+              >
+                {brick.parentId === b.id ? '● ' : ''}{b.name}
+              </button>
+            ))}
+          </div>
+          <div className="menu-divider" />
+          <button onClick={() => setMenu('main')}>‹ Back</button>
         </div>
       )}
 
@@ -155,14 +212,23 @@ export function BrickCard({ brick }: { brick: Brick }) {
         </div>
       )}
 
+      {memberMixIds.length > 0 && (
+        <div className="brick-mixtags">
+          {memberMixIds.map((m) => (
+            <span key={m.id} className="brick-mixtag" style={{ background: m.color }}>
+              {m.name}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="brick-footer">
         <button className="mini-btn" onClick={() => openEditor(brick.id)}>
           Open editor
         </button>
-        <label className="mix-toggle">
-          <input type="checkbox" checked={inMix} onChange={() => toggleInMix(brick.id)} />
-          Mix
-        </label>
+        <button className="mini-btn" onClick={() => setMenu('mix')}>
+          Mix ▾
+        </button>
       </div>
     </div>
   );

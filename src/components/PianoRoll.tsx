@@ -4,6 +4,8 @@ import { scalePitchClasses } from '../lib/theory';
 import { midiToName, engine } from '../audio/engine';
 import type { Note } from '../types';
 
+type Rect = { x0: number; y0: number; x1: number; y1: number };
+
 const PITCH_HIGH = 96; // C7
 const PITCH_LOW = 36; // C2
 const ROW_H = 16;
@@ -13,6 +15,7 @@ const STEP_W = BEAT_W / STEPS_PER_BEAT;
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const rowCount = PITCH_HIGH - PITCH_LOW + 1;
+const LANE_H = 60;
 
 function snapBeat(raw: number): number {
   return Math.round(raw * STEPS_PER_BEAT) / STEPS_PER_BEAT;
@@ -40,7 +43,7 @@ type Drag =
       moved: boolean;
     };
 
-type Marquee = { x0: number; y0: number; x1: number; y1: number } | null;
+type Marquee = Rect | null;
 
 export function PianoRoll({
   brickId,
@@ -60,10 +63,42 @@ export function PianoRoll({
   const [hovered, setHovered] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<Marquee>(null);
   const [lastDur, setLastDur] = useState(1);
+  const [playhead, setPlayhead] = useState<number | null>(null);
   const dragRef = useRef<Drag>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const velSvgRef = useRef<SVGSVGElement | null>(null);
+  const rollRef = useRef<HTMLDivElement | null>(null);
+  const velRef = useRef<HTMLDivElement | null>(null);
+  const syncingRef = useRef(false);
   const marqueeRef = useRef<Marquee>(null);
   marqueeRef.current = marquee;
+
+  // Playhead: follow the transport while this brick is playing.
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const b = useStore.getState().bricks.find((x) => x.id === brickId);
+      if (b && engine.isBrickPlaying(brickId)) {
+        setPlayhead(engine.transportBeats() % b.lengthBeats);
+      } else {
+        setPlayhead(null);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [brickId]);
+
+  // Keep the velocity lane horizontally aligned with the grid.
+  function syncScroll(from: 'roll' | 'vel') {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (from === 'roll' && rollRef.current && velRef.current)
+      velRef.current.scrollLeft = rollRef.current.scrollLeft;
+    else if (from === 'vel' && rollRef.current && velRef.current)
+      rollRef.current.scrollLeft = velRef.current.scrollLeft;
+    syncingRef.current = false;
+  }
 
   const scaleSet = useMemo(
     () => (brick ? scalePitchClasses(brick.key) : new Set<number>()),
@@ -247,6 +282,28 @@ export function PianoRoll({
     }
   }
 
+  function onVelDown(e: React.PointerEvent, note: Note) {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    // if the note is part of the current selection, edit the whole selection
+    const targets = selected.has(note.id) ? [...selected] : [note.id];
+    const apply = (clientY: number) => {
+      const rect = velSvgRef.current!.getBoundingClientRect();
+      const v = Math.max(0.05, Math.min(1, 1 - (clientY - rect.top) / LANE_H));
+      const patches: Record<string, Partial<Note>> = {};
+      for (const id of targets) patches[id] = { velocity: v };
+      updateNotesBatch(brick!.id, patches);
+    };
+    apply(e.clientY);
+    const move = (ev: PointerEvent) => apply(ev.clientY);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
   const rows = [];
   for (let i = 0; i < rowCount; i++) {
     const pitch = PITCH_HIGH - i;
@@ -262,11 +319,14 @@ export function PianoRoll({
   const m = marquee ? normRect(marquee) : null;
 
   return (
+    <div className="roll-with-vel">
     <div
       className="roll-scroll"
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onScroll={() => syncScroll('roll')}
       ref={(el) => {
+        rollRef.current = el;
         if (el && el.dataset.init !== '1') {
           el.dataset.init = '1';
           el.scrollTop = (PITCH_HIGH - 72) * ROW_H - 80;
@@ -401,6 +461,49 @@ export function PianoRoll({
                 strokeWidth={1}
               />
             )}
+            {playhead != null && (
+              <line
+                x1={playhead * BEAT_W}
+                y1={0}
+                x2={playhead * BEAT_W}
+                y2={height}
+                stroke="#5ef2a0"
+                strokeWidth={2}
+                pointerEvents="none"
+              />
+            )}
+          </svg>
+        </div>
+      </div>
+    </div>
+
+      {/* Velocity lane — bar height = velocity; drag a bar up/down to change it */}
+      <div className="vel-lane">
+        <div className="vel-label">Vel</div>
+        <div className="vel-scroll" ref={velRef} onScroll={() => syncScroll('vel')}>
+          <svg ref={velSvgRef} width={width} height={LANE_H} style={{ display: 'block', touchAction: 'none' }}>
+            <line x1={0} y1={LANE_H - 1} x2={width} y2={LANE_H - 1} stroke="#3a4150" />
+            {brick.notes.map((n) => {
+              const x = n.start * BEAT_W;
+              const w = Math.max(3, n.duration * BEAT_W - 1);
+              const h = Math.max(2, n.velocity * LANE_H);
+              const isSel = selected.has(n.id);
+              return (
+                <rect
+                  key={n.id}
+                  x={x}
+                  y={LANE_H - h}
+                  width={w}
+                  height={h}
+                  fill={brick.color}
+                  opacity={isSel ? 1 : 0.55}
+                  stroke={isSel ? '#fff' : 'none'}
+                  strokeWidth={isSel ? 1.5 : 0}
+                  style={{ cursor: 'ns-resize' }}
+                  onPointerDown={(e) => onVelDown(e, n)}
+                />
+              );
+            })}
           </svg>
         </div>
       </div>
@@ -413,7 +516,7 @@ function rank(n: Note, selected: Set<string>, hovered: string | null): number {
   return selected.has(n.id) || hovered === n.id ? 1 : 0;
 }
 
-function normRect(r: { x0: number; y0: number; x1: number; y1: number }) {
+function normRect(r: Rect): Rect {
   return {
     x0: Math.min(r.x0, r.x1),
     y0: Math.min(r.y0, r.y1),
@@ -422,10 +525,7 @@ function normRect(r: { x0: number; y0: number; x1: number; y1: number }) {
   };
 }
 
-function noteInRect(
-  n: Note,
-  m: { x0: number; y0: number; x1: number; y1: number }
-): boolean {
+function noteInRect(n: Note, m: Rect): boolean {
   const nx0 = n.start * BEAT_W;
   const nx1 = nx0 + Math.max(6, n.duration * BEAT_W);
   const ny0 = (PITCH_HIGH - n.pitch) * ROW_H;

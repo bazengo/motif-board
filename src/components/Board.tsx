@@ -1,17 +1,28 @@
 import { useStore } from '../store';
 import { BrickCard } from './BrickCard';
-
-const CARD_W = 210;
+import { MixNode } from './MixNode';
+import { CARD_W, MIX_W, MIX_H } from '../layout';
 
 export function Board() {
   const bricks = useStore((s) => s.bricks);
+  const mixes = useStore((s) => s.mixes);
   const addBrick = useStore((s) => s.addBrick);
   const openEditor = useStore((s) => s.openEditor);
 
   const byId = new Map(bricks.map((b) => [b.id, b]));
-  const links = bricks
+
+  // lineage edges (dashed) — parent -> child
+  const lineage = bricks
     .filter((b) => b.parentId && byId.has(b.parentId))
     .map((b) => ({ parent: byId.get(b.parentId!)!, child: b }));
+
+  // mix-membership edges (solid, mix-coloured) — brick -> mix node
+  const mixEdges = mixes.flatMap((m) =>
+    m.layers
+      .map((l) => byId.get(l.brickId))
+      .filter((b): b is NonNullable<typeof b> => !!b)
+      .map((b) => ({ brick: b, mix: m }))
+  );
 
   let maxX = 1200;
   let maxY = 800;
@@ -19,15 +30,21 @@ export function Board() {
     maxX = Math.max(maxX, b.board.x + CARD_W + 120);
     maxY = Math.max(maxY, b.board.y + 400);
   }
+  for (const m of mixes) {
+    maxX = Math.max(maxX, m.board.x + MIX_W + 120);
+    maxY = Math.max(maxY, m.board.y + MIX_H + 120);
+  }
+
+  const empty = bricks.length === 0 && mixes.length === 0;
 
   return (
     <div className="board">
-      {bricks.length === 0 && (
+      {empty && (
         <div className="board-empty">
           <h2>Your corkboard is empty</h2>
           <p>
             Create a <strong>brick</strong> — a small named motif with its own
-            piano roll, chords, lyrics and notes. Stack bricks in the mix, then
+            piano roll, chords, lyrics and notes. Stack bricks in a mix, then
             export MIDI to build full pieces elsewhere.
           </p>
           <button
@@ -42,9 +59,26 @@ export function Board() {
         </div>
       )}
 
-      {links.length > 0 && (
+      {(lineage.length > 0 || mixEdges.length > 0) && (
         <svg className="board-links" width={maxX} height={maxY}>
-          {links.map(({ parent, child }) => {
+          {mixEdges.map(({ brick, mix }) => {
+            const bx = brick.board.x + CARD_W / 2;
+            const by = brick.board.y + 20;
+            const mx = mix.board.x + MIX_W / 2;
+            const my = mix.board.y + MIX_H / 2;
+            const midX = (bx + mx) / 2;
+            return (
+              <path
+                key={`${mix.id}-${brick.id}`}
+                d={`M ${bx} ${by} C ${midX} ${by}, ${midX} ${my}, ${mx} ${my}`}
+                fill="none"
+                stroke={mix.color}
+                strokeWidth={2}
+                opacity={0.75}
+              />
+            );
+          })}
+          {lineage.map(({ parent, child }) => {
             const px = parent.board.x + CARD_W / 2;
             const py = parent.board.y + 60;
             const cx = child.board.x + CARD_W / 2;
@@ -64,6 +98,9 @@ export function Board() {
         </svg>
       )}
 
+      {mixes.map((m) => (
+        <MixNode key={m.id} mix={m} />
+      ))}
       {bricks.map((b) => (
         <BrickCard key={b.id} brick={b} />
       ))}

@@ -148,6 +148,98 @@
   margin-bottom: 18px;
 }
 
+.btn-group {
+  display: flex;
+  gap: 2px;
+}
+.mini-btn.danger {
+  color: #b32b2b;
+}
+
+/* ---------- Mix node (on board) ---------- */
+.mix-node {
+  position: absolute;
+  z-index: 1;
+  background: #1b1f27;
+  border: 2px solid #7bdff2;
+  border-radius: 10px;
+  padding: 0 8px 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.mix-node.active {
+  box-shadow: 0 0 0 2px #ffd166, 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+.mix-node-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  margin: 0 -8px 6px;
+  padding: 0 8px;
+  border-radius: 8px 8px 0 0;
+  cursor: grab;
+  color: #16181d;
+  font-weight: 700;
+}
+.mix-node-handle:active {
+  cursor: grabbing;
+}
+.mix-node-count {
+  font-size: 12px;
+}
+.mix-node-name {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed #3a4150;
+  color: #e6e9ef;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 2px 0;
+  margin-bottom: 6px;
+}
+.mix-node-name:focus {
+  outline: none;
+  border-bottom-color: #6a7385;
+}
+.mix-node-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ---------- Mix membership tags on brick cards ---------- */
+.brick-mixtags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 2px;
+}
+.brick-mixtag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #16181d;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.mix-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.menu-empty {
+  font-size: 12px;
+  color: #8a92a3;
+  padding: 4px 8px;
+}
+.menu-scroll {
+  max-height: 160px;
+  overflow-y: auto;
+}
+.brick-menu button.on {
+  color: #ffd166;
+}
+
 /* ---------- Lineage connectors ---------- */
 .board-links {
   position: absolute;
@@ -346,9 +438,29 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .mix-header h3 {
   margin: 0;
+}
+.mix-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.mix-select {
+  flex: 1;
+  min-width: 0;
+  background: #12151b;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 600;
 }
 .mix-actions {
   display: flex;
@@ -695,4 +807,33 @@
 }
 .roll-grid-wrap {
   flex-shrink: 0;
+}
+
+/* ---------- Velocity lane ---------- */
+.vel-lane {
+  display: flex;
+  align-items: stretch;
+  margin-top: 6px;
+  border: 1px solid #2c313d;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #22262f;
+}
+.vel-label {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8a92a3;
+  background: #2b303a;
+  border-right: 1px solid #1f232b;
+}
+.vel-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
 }

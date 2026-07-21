@@ -3,10 +3,12 @@ import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import {
   type Brick,
+  type Mix,
   type MixLayer,
   type Note,
   type InstrumentId,
   STICKY_COLORS,
+  MIX_COLORS,
   DEFAULT_DISPLAY,
 } from './types';
 
@@ -41,6 +43,37 @@ export function makeBrick(partial: Partial<Brick> = {}): Brick {
     display: { ...DEFAULT_DISPLAY },
     ...partial,
   };
+}
+
+let mixColorCursor = 0;
+export function makeMix(partial: Partial<Mix> = {}): Mix {
+  const color = MIX_COLORS[mixColorCursor % MIX_COLORS.length];
+  mixColorCursor++;
+  return {
+    id: nanoid(8),
+    name: 'New mix',
+    color,
+    board: { x: 520, y: 60 },
+    layers: [],
+    ...partial,
+  };
+}
+
+/** Descendants of `id` (its whole subtree, excluding itself). Used to prevent
+ *  cycles when re-parenting. */
+export function descendantIds(bricks: Brick[], id: string): Set<string> {
+  const out = new Set<string>();
+  let added = true;
+  while (added) {
+    added = false;
+    for (const b of bricks) {
+      if (b.parentId && (b.parentId === id || out.has(b.parentId)) && !out.has(b.id)) {
+        out.add(b.id);
+        added = true;
+      }
+    }
+  }
+  return out;
 }
 
 /** All bricks connected to `id` through parent/child links (the whole lineage
@@ -107,7 +140,8 @@ interface AppState {
   selectedBrickId: string | null;
   editorOpen: boolean;
   globalBpm: number;
-  mix: MixLayer[];
+  mixes: Mix[];
+  activeMixId: string | null;
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -115,6 +149,7 @@ interface AppState {
   deleteBrick: (id: string) => void;
   duplicateBrick: (id: string) => void;
   branchBrick: (id: string) => string | null;
+  setParent: (id: string, parentId: string | null) => void;
   moveBrick: (id: string, x: number, y: number) => void;
 
   // selection / editor
@@ -132,10 +167,15 @@ interface AppState {
   removeNotes: (brickId: string, noteIds: string[]) => void;
   removeNote: (brickId: string, noteId: string) => void;
 
-  // mix
+  // mixes
   setGlobalBpm: (bpm: number) => void;
-  toggleInMix: (brickId: string) => void;
-  updateLayer: (brickId: string, patch: Partial<MixLayer>) => void;
+  addMix: (partial?: Partial<Mix>) => string;
+  deleteMix: (mixId: string) => void;
+  updateMix: (mixId: string, patch: Partial<Omit<Mix, 'layers'>>) => void;
+  moveMix: (mixId: string, x: number, y: number) => void;
+  setActiveMix: (mixId: string | null) => void;
+  toggleBrickInMix: (mixId: string, brickId: string) => void;
+  updateLayer: (mixId: string, brickId: string, patch: Partial<MixLayer>) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -145,7 +185,8 @@ export const useStore = create<AppState>()(
       selectedBrickId: null,
       editorOpen: false,
       globalBpm: 120,
-      mix: [],
+      mixes: [],
+      activeMixId: null,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -162,9 +203,17 @@ export const useStore = create<AppState>()(
         set((s) => ({
           bricks: s.bricks
             .filter((b) => b.id !== id)
-            // re-parent orphans to null so lineage lines don't dangle
-            .map((b) => (b.parentId === id ? { ...b, parentId: null } : b)),
-          mix: s.mix.filter((m) => m.brickId !== id),
+            // re-parent orphans to the deleted brick's parent so the chain
+            // survives a middle-link deletion (grandparent adopts the children)
+            .map((b) => {
+              if (b.parentId !== id) return b;
+              const removed = s.bricks.find((x) => x.id === id);
+              return { ...b, parentId: removed?.parentId ?? null };
+            }),
+          mixes: s.mixes.map((mx) => ({
+            ...mx,
+            layers: mx.layers.filter((l) => l.brickId !== id),
+          })),
           selectedBrickId: s.selectedBrickId === id ? null : s.selectedBrickId,
           editorOpen: s.selectedBrickId === id ? false : s.editorOpen,
         })),
@@ -195,6 +244,18 @@ export const useStore = create<AppState>()(
         set((st) => ({ bricks: [...st.bricks, child] }));
         return child.id;
       },
+
+      setParent: (id, parentId) =>
+        set((s) => {
+          if (id === parentId) return {};
+          // can't parent to self or to one of your own descendants (no cycles)
+          if (parentId && descendantIds(s.bricks, id).has(parentId)) return {};
+          return {
+            bricks: s.bricks.map((b) =>
+              b.id === id ? { ...b, parentId } : b
+            ),
+          };
+        }),
 
       moveBrick: (id, x, y) =>
         set((s) => ({
@@ -271,52 +332,112 @@ export const useStore = create<AppState>()(
 
       setGlobalBpm: (bpm) => set({ globalBpm: clampBpm(bpm) }),
 
-      toggleInMix: (brickId) =>
+      addMix: (partial) => {
+        const s = useStore.getState();
+        const mix = makeMix({
+          name: `Mix ${s.mixes.length + 1}`,
+          board: { x: 520, y: 60 + s.mixes.length * 150 },
+          ...partial,
+        });
+        set((st) => ({ mixes: [...st.mixes, mix], activeMixId: mix.id }));
+        return mix.id;
+      },
+
+      deleteMix: (mixId) =>
+        set((s) => ({
+          mixes: s.mixes.filter((m) => m.id !== mixId),
+          activeMixId: s.activeMixId === mixId ? null : s.activeMixId,
+        })),
+
+      updateMix: (mixId, patch) =>
+        set((s) => ({
+          mixes: s.mixes.map((m) => (m.id === mixId ? { ...m, ...patch } : m)),
+        })),
+
+      moveMix: (mixId, x, y) =>
+        set((s) => ({
+          mixes: s.mixes.map((m) =>
+            m.id === mixId ? { ...m, board: { x, y } } : m
+          ),
+        })),
+
+      setActiveMix: (mixId) => set({ activeMixId: mixId }),
+
+      toggleBrickInMix: (mixId, brickId) =>
         set((s) => {
-          const exists = s.mix.some((m) => m.brickId === brickId);
-          if (exists)
-            return { mix: s.mix.filter((m) => m.brickId !== brickId) };
-          const layer: MixLayer = {
-            brickId,
-            loop: true,
-            mute: false,
-            solo: false,
-            gain: 0.8,
-          };
-          // Only one iteration of a lineage tree plays at a time: drop any
-          // sibling/ancestor/descendant already in the mix.
           const fam = familyIds(s.bricks, brickId);
-          const mix = s.mix.filter(
-            (m) => m.brickId === brickId || !fam.has(m.brickId)
-          );
-          return { mix: [...mix, layer] };
+          return {
+            mixes: s.mixes.map((mx) => {
+              if (mx.id !== mixId) return mx;
+              const exists = mx.layers.some((l) => l.brickId === brickId);
+              if (exists) {
+                return {
+                  ...mx,
+                  layers: mx.layers.filter((l) => l.brickId !== brickId),
+                };
+              }
+              // Per-mix lineage exclusion: within THIS mix, only one iteration
+              // of a lineage tree. Other mixes are unaffected.
+              const kept = mx.layers.filter((l) => !fam.has(l.brickId));
+              return {
+                ...mx,
+                layers: [
+                  ...kept,
+                  { brickId, loop: true, mute: false, solo: false, gain: 0.8 },
+                ],
+              };
+            }),
+          };
         }),
 
-      updateLayer: (brickId, patch) =>
+      updateLayer: (mixId, brickId, patch) =>
         set((s) => ({
-          mix: s.mix.map((m) =>
-            m.brickId === brickId ? { ...m, ...patch } : m
+          mixes: s.mixes.map((mx) =>
+            mx.id === mixId
+              ? {
+                  ...mx,
+                  layers: mx.layers.map((l) =>
+                    l.brickId === brickId ? { ...l, ...patch } : l
+                  ),
+                }
+              : mx
           ),
         })),
     }),
     {
       name: 'music-composition-suite',
-      version: 1,
-      migrate: (persisted: unknown) => {
-        const state = persisted as { bricks?: Brick[] } | undefined;
-        if (state?.bricks) {
-          state.bricks = state.bricks.map((b) => ({
-            ...b,
-            parentId: b.parentId ?? null,
-            display: b.display ?? { ...DEFAULT_DISPLAY },
-          }));
+      version: 2,
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as
+          | { bricks?: Brick[]; mix?: MixLayer[]; mixes?: Mix[]; activeMixId?: string | null }
+          | undefined;
+        if (!state) return state as never;
+        // v0/v1 -> add brick fields
+        state.bricks = (state.bricks ?? []).map((b) => ({
+          ...b,
+          parentId: b.parentId ?? null,
+          display: b.display ?? { ...DEFAULT_DISPLAY },
+        }));
+        // v1 -> v2: single `mix` becomes a list of named mixes
+        if (version < 2) {
+          const legacy = state.mix ?? [];
+          if (legacy.length > 0) {
+            const mix = makeMix({ name: 'Mix 1', layers: legacy });
+            state.mixes = [mix];
+            state.activeMixId = mix.id;
+          } else {
+            state.mixes = [];
+            state.activeMixId = null;
+          }
+          delete state.mix;
         }
         return state as never;
       },
       partialize: (s) => ({
         bricks: s.bricks,
         globalBpm: s.globalBpm,
-        mix: s.mix,
+        mixes: s.mixes,
+        activeMixId: s.activeMixId,
       }),
     }
   )

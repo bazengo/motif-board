@@ -117,6 +117,15 @@ class AudioEngine {
     return this.voices.size > 0;
   }
 
+  /** Current transport position in beats (quarter notes) — for the playhead. */
+  transportBeats(): number {
+    return Tone.getTransport().seconds * (this.currentBpm / 60);
+  }
+
+  isBrickPlaying(brickId: string): boolean {
+    return this.voices.has(brickId);
+  }
+
   private async ensureStarted() {
     if (!this.started) {
       await Tone.start();

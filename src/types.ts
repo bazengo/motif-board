@@ -67,7 +67,7 @@ export interface Brick {
   display: BrickDisplay;
 }
 
-/** One brick's participation in the layered mix (Phase 1 "stack" model). */
+/** One brick's participation in a mix (Phase 1 "stack" model). */
 export interface MixLayer {
   brickId: string;
   loop: boolean;
@@ -75,6 +75,25 @@ export interface MixLayer {
   solo: boolean;
   gain: number; // 0..1
 }
+
+/** A named combination of bricks that live as a node on the board. Bricks
+ *  connect to it via edges; only one iteration of a lineage may join per mix. */
+export interface Mix {
+  id: string;
+  name: string;
+  color: string;
+  board: { x: number; y: number };
+  layers: MixLayer[];
+}
+
+export const MIX_COLORS = [
+  '#7bdff2',
+  '#b8f2e6',
+  '#f2c14e',
+  '#f4a261',
+  '#e07a9b',
+  '#a29bfe',
+];
 
 export const STICKY_COLORS = [
   '#ffd166',
