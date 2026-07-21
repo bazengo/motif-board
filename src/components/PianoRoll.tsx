@@ -370,6 +370,12 @@ export function PianoRoll({
   const stepLines = [];
   for (let s = 0; s <= brick.lengthBeats * STEPS_PER_BEAT; s++) stepLines.push(s);
 
+  // bar lines from the time signature (in quarter-note beats; may be fractional)
+  const ts = brick.timeSig ?? { num: 4, den: 4 };
+  const beatsPerBar = (ts.num * 4) / ts.den || 4;
+  const barLines: number[] = [];
+  for (let x = 0; x <= brick.lengthBeats + 1e-6; x += beatsPerBar) barLines.push(x);
+
   const m = marquee ? normRect(marquee) : null;
 
   return (
@@ -512,8 +518,19 @@ export function PianoRoll({
                 y1={0}
                 x2={b * BEAT_W}
                 y2={height}
-                stroke={b % 4 === 0 ? '#5a6473' : '#3a4150'}
-                strokeWidth={b % 4 === 0 ? 1.5 : 1}
+                stroke="#3a4150"
+                strokeWidth={1}
+              />
+            ))}
+            {barLines.map((b, i) => (
+              <line
+                key={'bar' + i}
+                x1={b * BEAT_W}
+                y1={0}
+                x2={b * BEAT_W}
+                y2={height}
+                stroke="#5a6473"
+                strokeWidth={1.5}
               />
             ))}
             {/* Paint plain notes first, then selected/hovered on top so their

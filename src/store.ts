@@ -35,6 +35,7 @@ export function makeBrick(partial: Partial<Brick> = {}): Brick {
     bpm: 120,
     lengthBeats: 8,
     instrument: 'triangle',
+    timeSig: { num: 4, den: 4 },
     board: {
       x: 40 + (n % 3) * 30,
       y: 40 + (n % 5) * 24,
@@ -468,7 +469,7 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'music-composition-suite',
-      version: 3,
+      version: 4,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {
@@ -486,6 +487,7 @@ export const useStore = create<AppState>()(
           ...b,
           parentId: b.parentId ?? null,
           display: b.display ?? { ...DEFAULT_DISPLAY },
+          timeSig: b.timeSig ?? { num: 4, den: 4 },
         }));
         // v1 -> v2: single `mix` becomes a list of named mixes
         if (version < 2) {

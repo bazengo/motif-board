@@ -72,10 +72,22 @@ export interface Brick {
   bpm: number; // per-brick tempo (used for solo playback + MIDI export)
   lengthBeats: number; // brick length / loop length
   instrument: InstrumentId;
+  timeSig: { num: number; den: number }; // e.g. 4/4, 3/4, 6/8 — grid bar lines
   board: { x: number; y: number; rotation: number }; // corkboard placement
   parentId: string | null; // leitmotif lineage — which brick this iterates from
   display: BrickDisplay;
 }
+
+export const TIME_SIGNATURES: { num: number; den: number }[] = [
+  { num: 4, den: 4 },
+  { num: 3, den: 4 },
+  { num: 2, den: 4 },
+  { num: 5, den: 4 },
+  { num: 6, den: 8 },
+  { num: 7, den: 8 },
+  { num: 9, den: 8 },
+  { num: 12, den: 8 },
+];
 
 /** One brick's participation in a mix (Phase 1 "stack" model). */
 export interface MixLayer {

@@ -85,6 +85,8 @@ interface Voice {
   part: Tone.Part<NoteEvent>;
   channel: number;
   instrument: InstrumentId;
+  loop: boolean;
+  lengthBeats: number;
   sig: string;
 }
 
@@ -187,6 +189,8 @@ class AudioEngine {
         part: null as unknown as Tone.Part<NoteEvent>,
         channel,
         instrument: brick.instrument,
+        loop,
+        lengthBeats: brick.lengthBeats,
         sig: brickSignature(brick),
       };
 
@@ -207,11 +211,14 @@ class AudioEngine {
     }
 
     transport.position = 0;
-    transport.start();
+    // Start slightly ahead so the scheduler catches events at time 0 — without
+    // this, the very first note is missed until the loop comes back around.
+    const START_DELAY = 0.1;
+    transport.start(`+${START_DELAY}`);
     this.emit(true);
 
     if (!anyLoop) {
-      const ms = (maxEndBeats * secPerBeat + 0.3) * 1000;
+      const ms = (maxEndBeats * secPerBeat + START_DELAY + 0.3) * 1000;
       this.endTimer = window.setTimeout(() => this.stop(), ms);
     }
   }
@@ -239,11 +246,23 @@ class AudioEngine {
         voice.instrument = brick.instrument;
       }
 
-      voice.part.clear();
-      for (const ev of buildEvents(brick, secPerBeat)) {
-        voice.part.add(ev.time, ev);
+      if (brick.lengthBeats !== voice.lengthBeats) {
+        // Rebuild the Part — a running looping Part doesn't reliably honour a
+        // changed loopEnd, so recreate it to apply the new loop length live.
+        voice.part.dispose();
+        const part = this.makePart(voice, buildEvents(brick, secPerBeat));
+        part.loop = voice.loop;
+        part.loopStart = 0;
+        part.loopEnd = beatsToBBS(brick.lengthBeats);
+        part.start(0);
+        voice.part = part;
+        voice.lengthBeats = brick.lengthBeats;
+      } else {
+        voice.part.clear();
+        for (const ev of buildEvents(brick, secPerBeat)) {
+          voice.part.add(ev.time, ev);
+        }
       }
-      voice.part.loopEnd = beatsToBBS(brick.lengthBeats);
     }
   }
 

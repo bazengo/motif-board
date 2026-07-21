@@ -584,6 +584,15 @@
   gap: 6px;
   margin-left: auto;
 }
+.head-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #9aa3b2;
+  white-space: nowrap;
+  padding-bottom: 6px;
+}
 .editor-body {
   display: flex;
   min-height: 0;

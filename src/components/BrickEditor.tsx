@@ -10,7 +10,7 @@ import {
   chordMidi,
   parseProgression,
 } from '../lib/theory';
-import { INSTRUMENTS } from '../types';
+import { INSTRUMENTS, TIME_SIGNATURES } from '../types';
 
 export function BrickEditor() {
   const brickId = useStore((s) => s.selectedBrickId);
@@ -22,6 +22,7 @@ export function BrickEditor() {
 
   const [tab, setTab] = useState<'details' | 'theory'>('details');
   const [audition, setAudition] = useState(true);
+  const [transposeKey, setTransposeKey] = useState(false);
   const [chordSym, setChordSym] = useState('Am');
   const [chordOct, setChordOct] = useState(4);
   const [chordBeat, setChordBeat] = useState(0);
@@ -38,6 +39,23 @@ export function BrickEditor() {
   const scaleType = rest.join(' ') || 'major';
 
   function setKey(newRoot: string, newScale: string) {
+    // Optionally transpose the brick's notes by the root change (nearest
+    // direction, so the motif stays in register).
+    if (transposeKey && newRoot !== root) {
+      const oldPc = NOTE_NAMES.indexOf(root);
+      const newPc = NOTE_NAMES.indexOf(newRoot);
+      if (oldPc >= 0 && newPc >= 0) {
+        let delta = (newPc - oldPc) % 12;
+        if (delta > 6) delta -= 12;
+        if (delta < -6) delta += 12;
+        const notes = brick!.notes.map((n) => ({
+          ...n,
+          pitch: Math.max(0, Math.min(127, n.pitch + delta)),
+        }));
+        updateBrick(brick!.id, { key: `${newRoot} ${newScale}`, notes });
+        return;
+      }
+    }
     updateBrick(brick!.id, { key: `${newRoot} ${newScale}` });
   }
 
@@ -88,6 +106,35 @@ export function BrickEditor() {
             <select value={scaleType} onChange={(e) => setKey(root, e.target.value)}>
               {SCALE_TYPES.map((s) => (
                 <option key={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+
+          <label
+            className="head-check"
+            title="When you change the key root, shift the brick's notes to match"
+          >
+            <input
+              type="checkbox"
+              checked={transposeKey}
+              onChange={(e) => setTransposeKey(e.target.checked)}
+            />
+            ⇅ transpose
+          </label>
+
+          <label className="fld">
+            Time
+            <select
+              value={`${brick.timeSig?.num ?? 4}/${brick.timeSig?.den ?? 4}`}
+              onChange={(e) => {
+                const [num, den] = e.target.value.split('/').map(Number);
+                updateBrick(brick.id, { timeSig: { num, den } });
+              }}
+            >
+              {TIME_SIGNATURES.map((ts) => (
+                <option key={`${ts.num}/${ts.den}`} value={`${ts.num}/${ts.den}`}>
+                  {ts.num}/{ts.den}
+                </option>
               ))}
             </select>
           </label>
