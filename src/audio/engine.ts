@@ -4,6 +4,7 @@ import type { Brick, InstrumentId, Mix } from '../types';
 import { layerLevels } from '../lib/mix';
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
+import { DrumKit } from './drumkit';
 import type { ScheduledNote } from '../lib/timeline';
 
 // Convert a MIDI pitch to a note name Tone understands ("C4", "F#5", ...).
@@ -20,9 +21,14 @@ function beatsToBBS(beats: number): string {
   return `0:${q}:${s}`;
 }
 
-type Voiceable = Tone.PolySynth | Tone.Sampler;
+type Voiceable = Tone.PolySynth | Tone.Sampler | DrumKit;
 
-function makeSynth(instrument: InstrumentId): Voiceable {
+/** Percussion bricks always use the drum kit, whatever instrument is set. */
+function makeVoiceFor(brick: Brick): Voiceable {
+  return brick.percussion ? new DrumKit() : makeSynth(brick.instrument);
+}
+
+function makeSynth(instrument: InstrumentId): Tone.PolySynth | Tone.Sampler {
   switch (instrument) {
     case 'piano':
       return new Tone.Sampler({
@@ -195,7 +201,7 @@ class AudioEngine {
       let synth: Voiceable | null = null;
       if (internalOn) {
         volume = new Tone.Volume(gainToDb(gain)).toDestination();
-        synth = makeSynth(brick.instrument).connect(volume);
+        synth = makeVoiceFor(brick).connect(volume);
       }
 
       const voice: Voice = {
@@ -279,7 +285,7 @@ class AudioEngine {
       let synth: Voiceable | null = null;
       if (internalOn) {
         volume = new Tone.Volume(0).toDestination();
-        synth = makeSynth(brick.instrument).connect(volume);
+        synth = makeVoiceFor(brick).connect(volume);
       }
 
       const voice: Voice = {
@@ -335,7 +341,7 @@ class AudioEngine {
       voice.sig = sig;
 
       if (brick.instrument !== voice.instrument && voice.synth && voice.volume) {
-        const next = makeSynth(brick.instrument).connect(voice.volume);
+        const next = makeVoiceFor(brick).connect(voice.volume);
         voice.synth.dispose();
         voice.synth = next;
         voice.instrument = brick.instrument;
@@ -384,15 +390,23 @@ class AudioEngine {
   }
 
   /** Audition a single pitch (used when placing notes). */
-  async preview(pitch: number, instrument: InstrumentId, gain = 0.8) {
+  async preview(
+    pitch: number,
+    instrument: InstrumentId,
+    gain = 0.8,
+    percussion = false
+  ) {
     await this.ensureStarted();
-    let synth = this.previewSynths.get(instrument);
+    // percussion auditions through the drum kit, keyed separately from synths
+    const key = (percussion ? 'drums' : instrument) as InstrumentId;
+    let synth = this.previewSynths.get(key);
     if (!synth) {
       const vol = new Tone.Volume(gainToDb(gain)).toDestination();
-      synth = makeSynth(instrument).connect(vol);
-      this.previewSynths.set(instrument, synth);
+      synth = (percussion ? new DrumKit() : makeSynth(instrument)).connect(vol);
+      this.previewSynths.set(key, synth);
     }
-    synth.triggerAttackRelease(midiToName(pitch), 0.3);
+    if (synth instanceof DrumKit) synth.triggerAttackRelease(pitch, 0.3);
+    else synth.triggerAttackRelease(midiToName(pitch), 0.3);
 
     const out = getSelectedOutput();
     if (out) {

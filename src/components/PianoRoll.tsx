@@ -208,7 +208,7 @@ export function PianoRoll({
       const newPrimaryPitch = pitchOfRow(rowOfPitch(primary.pitch) + deltaRow);
       if (audition && newPrimaryPitch !== d.lastPreview) {
         d.lastPreview = newPrimaryPitch;
-        engine.preview(newPrimaryPitch, brick.instrument);
+        engine.preview(newPrimaryPitch, brick.instrument, 0.8, brick.percussion);
       }
     }
 
@@ -264,7 +264,8 @@ export function PianoRoll({
                 velocity: 0.8,
               });
             }
-            if (audition) engine.preview(anchorPitch, brick.instrument);
+            if (audition)
+              engine.preview(anchorPitch, brick.instrument, 0.8, brick.percussion);
             setSelected(new Set());
           }
         }
