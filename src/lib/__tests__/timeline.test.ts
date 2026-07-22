@@ -132,6 +132,78 @@ describe('buildTimelinePlan', () => {
     expect(plan.totalSeconds).toBe(0);
   });
 
+  // Mix playback loops each layer at its own length, so the arrangement has to
+  // as well — otherwise a short brick played once and left the rest silent.
+  describe('short bricks fill the section', () => {
+    // long brick sets the mix length to 8 beats; short brick is 2
+    const long = testBrick({ lengthBeats: 8, notes: [] });
+    const short = testBrick({ lengthBeats: 2, notes: [testNote({ start: 0 })] });
+
+    it('repeats a short brick across the pass', () => {
+      const mix = testMix({
+        layers: [testLayer(long.id), testLayer(short.id)],
+      });
+      const plan = buildTimelinePlan(
+        [testSection(mix.id)],
+        [mix],
+        [long, short],
+        120
+      );
+      // 8-beat pass / 2-beat brick = 4 plays, every 2 beats (1s at 120bpm)
+      expect(plan.notes.map((n) => n.time)).toEqual([0, 1, 2, 3]);
+    });
+
+    it('keeps filling on every section repeat', () => {
+      const mix = testMix({ layers: [testLayer(long.id), testLayer(short.id)] });
+      const plan = buildTimelinePlan(
+        [testSection(mix.id, { repeats: 2 })],
+        [mix],
+        [long, short],
+        120
+      );
+      expect(plan.notes).toHaveLength(8);
+      expect(plan.totalSeconds).toBeCloseTo(8);
+    });
+
+    it('plays once per pass when the layer is not looping', () => {
+      const mix = testMix({
+        layers: [testLayer(long.id), testLayer(short.id, { loop: false })],
+      });
+      const plan = buildTimelinePlan(
+        [testSection(mix.id)],
+        [mix],
+        [long, short],
+        120
+      );
+      expect(plan.notes.map((n) => n.time)).toEqual([0]);
+    });
+
+    it('does not start a repeat past the end of the pass', () => {
+      // 3-beat brick in an 8-beat pass: plays at 0, 3, 6 — the note at
+      // offset 6 + start 2.5 would land at 8.5, beyond the pass
+      const three = testBrick({
+        lengthBeats: 3,
+        notes: [testNote({ start: 0 }), testNote({ start: 2.5 })],
+      });
+      const mix = testMix({ layers: [testLayer(long.id), testLayer(three.id)] });
+      const plan = buildTimelinePlan(
+        [testSection(mix.id)],
+        [mix],
+        [long, three],
+        120
+      );
+      // beats 0, 2.5, 3, 5.5, 6 -> seconds at 120bpm
+      expect(plan.notes.map((n) => n.time)).toEqual([0, 1.25, 1.5, 2.75, 3]);
+    });
+
+    it('leaves a brick the same length as the mix playing once', () => {
+      const mix = testMix({ layers: [testLayer(long.id)] });
+      const same = { ...long, notes: [testNote({ start: 0 })] };
+      const plan = buildTimelinePlan([testSection(mix.id)], [mix], [same], 120);
+      expect(plan.notes).toHaveLength(1);
+    });
+  });
+
   it('returns notes in chronological order', () => {
     const brick = testBrick({
       lengthBeats: 4,

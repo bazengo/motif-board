@@ -78,16 +78,27 @@ export function buildTimelinePlan(
 
     for (let r = 0; r < repeats; r++) {
       const base = t + r * loopBeats * secPerBeat;
-      for (const { brick, gain } of items) {
-        for (const n of brick.notes) {
-          notes.push({
-            brick,
-            pitch: n.pitch,
-            time: base + n.start * secPerBeat,
-            dur: n.duration * secPerBeat,
-            // layer gain is folded into velocity so one synth per brick is enough
-            velocity: Math.max(0.01, Math.min(1, n.velocity * gain)),
-          });
+      for (const { brick, gain, loop } of items) {
+        // A brick shorter than the mix repeats to fill the pass, matching how
+        // mix playback loops each layer at its own length. Layers with looping
+        // switched off play once per pass instead.
+        const brickLen = brick.lengthBeats > 0 ? brick.lengthBeats : loopBeats;
+        const passes = loop ? Math.max(1, Math.ceil(loopBeats / brickLen)) : 1;
+        for (let p = 0; p < passes; p++) {
+          const offset = p * brickLen;
+          for (const n of brick.notes) {
+            const startBeat = offset + n.start;
+            // a repeat may overhang the pass — don't start notes past its end
+            if (startBeat >= loopBeats - 1e-9) continue;
+            notes.push({
+              brick,
+              pitch: n.pitch,
+              time: base + startBeat * secPerBeat,
+              dur: n.duration * secPerBeat,
+              // layer gain is folded into velocity so one synth per brick is enough
+              velocity: Math.max(0.01, Math.min(1, n.velocity * gain)),
+            });
+          }
         }
       }
     }
