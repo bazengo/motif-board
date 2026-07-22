@@ -280,7 +280,20 @@
 .tl-actions {
   margin-left: auto;
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+.tl-addmix {
+  background: #262b36;
+  border: 1px solid #363d4b;
+  color: #dfe4ee;
+  border-radius: 7px;
+  padding: 7px 8px;
+  font-size: 13px;
+  max-width: 170px;
+}
+.tl-addmix:disabled {
+  opacity: 0.45;
 }
 /* horizontal scroller shared by the ruler and the lane so they stay aligned */
 .tl-scroll {

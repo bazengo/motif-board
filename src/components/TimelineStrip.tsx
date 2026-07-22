@@ -31,6 +31,7 @@ export function TimelineStrip() {
   const [dragOut, setDragOut] = useState(false);
   const [copyMode, setCopyMode] = useState(false);
   const duplicateSection = useStore((s) => s.duplicateTimelineSection);
+  const addSection = useStore((s) => s.addTimelineSection);
   const [playhead, setPlayhead] = useState(0); // seek position when not running
   const [loopAll, setLoopAll] = useState(false);
   const editorOpen = useStore((s) => s.editorOpen);
@@ -267,6 +268,26 @@ export function TimelineStrip() {
         </span>
 
         <div className="tl-actions">
+          <select
+            className="tl-addmix"
+            value=""
+            disabled={mixes.length === 0}
+            title="Append a mix to the arrangement"
+            onChange={(e) => {
+              if (!e.target.value) return;
+              setSelectedId(addSection(e.target.value));
+            }}
+          >
+            <option value="">
+              {mixes.length ? '+ Add section…' : 'No mixes yet'}
+            </option>
+            {mixes.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+
           <div className="btn-group">
             <button
               className="ghost-btn"
