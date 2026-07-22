@@ -117,6 +117,7 @@ class AudioEngine {
   private usedChannels = new Set<number>();
   private previewSynths = new Map<InstrumentId, Voiceable>();
   private activeMixId: string | null = null;
+  private clickSynth: Tone.MembraneSynth | null = null;
 
   monitorInternal = true;
 
@@ -387,6 +388,18 @@ class AudioEngine {
         voice.volume.volume.rampTo(db, 0.05);
       }
     }
+  }
+
+  /** Metronome tick for count-in. */
+  async metronomeClick(accent = false) {
+    await this.ensureStarted();
+    if (!this.clickSynth) {
+      this.clickSynth = new Tone.MembraneSynth({
+        octaves: 2,
+        envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 },
+      }).toDestination();
+    }
+    this.clickSynth.triggerAttackRelease(accent ? 'C6' : 'G5', 0.05);
   }
 
   /** Audition a single pitch (used when placing notes). */

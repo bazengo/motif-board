@@ -1079,6 +1079,55 @@
   flex-shrink: 0;
 }
 
+/* ---------- Record bar ---------- */
+.record-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 9px;
+  margin-bottom: 8px;
+  background: #12151b;
+  border: 1px solid #2c313d;
+  border-radius: 8px;
+}
+.rec-btn {
+  background: #2a2130;
+  border: 1px solid #6b2b3a;
+  color: #ff8a8a;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.rec-btn.on {
+  background: #b3243d;
+  border-color: #b3243d;
+  color: #fff;
+  animation: recpulse 1.2s ease-in-out infinite;
+}
+@keyframes recpulse {
+  50% {
+    opacity: 0.65;
+  }
+}
+.rec-count {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffd166;
+  min-width: 22px;
+  text-align: center;
+}
+.rec-held {
+  font-size: 11px;
+  color: #8a92a3;
+  font-family: monospace;
+}
+.rec-err {
+  font-size: 11px;
+  color: #ffb3b3;
+}
+
 .roll-editbar {
   display: flex;
   align-items: center;

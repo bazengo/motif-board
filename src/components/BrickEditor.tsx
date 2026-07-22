@@ -3,6 +3,8 @@ import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { PianoRoll } from './PianoRoll';
+import { RecordBar } from './RecordBar';
+import { useRecorder } from '../useRecorder';
 import {
   NOTE_NAMES,
   SCALE_TYPES,
@@ -27,6 +29,7 @@ export function BrickEditor() {
   const [chordOct, setChordOct] = useState(4);
   const [chordBeat, setChordBeat] = useState(0);
   const [replace, setReplace] = useState(true);
+  const rec = useRecorder(brickId ?? '');
 
   const parsedChords = useMemo(
     () => parseProgression(brick?.chords ?? ''),
@@ -216,6 +219,7 @@ export function BrickEditor() {
 
         <div className="editor-body">
           <div className="editor-roll">
+            <RecordBar rec={rec} />
             <PianoRoll brickId={brickId} audition={audition} />
             <div className="roll-toolbar">
               <label className="audition-toggle">
