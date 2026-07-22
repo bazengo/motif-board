@@ -282,6 +282,21 @@ class AudioEngine {
     return this.voices.has(brickId);
   }
 
+  /**
+   * Where a sounding brick is within its own loop, for the per-card tracker.
+   * Read from the voice's real loop length rather than derived from the
+   * transport tempo — the arrangement runs the transport at a fixed 120 with
+   * absolute-second events, so a tempo-derived position is meaningless there.
+   */
+  brickPosition(brickId: string): { progress: number; remaining: number } | null {
+    const voice = this.voices.get(brickId);
+    if (!voice || voice.loopSec <= 0) return null;
+    const elapsed = Math.max(0, Tone.getTransport().seconds - PART_LEAD);
+    const len = voice.loopSec;
+    const pos = ((elapsed % len) + len) % len;
+    return { progress: pos / len, remaining: len - pos };
+  }
+
   /** Elapsed transport time in seconds — for the timeline playhead. */
   transportSeconds(): number {
     return Math.max(0, Tone.getTransport().seconds - PART_LEAD);
