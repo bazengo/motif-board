@@ -191,10 +191,12 @@ class AudioEngine {
     if (items.length === 0) return;
     this.activeMixId = mixId ?? null;
 
+    // never let a bad tempo reach the transport — NaN there stops everything
+    const safeBpm = Number.isFinite(bpm) && bpm > 0 ? bpm : 120;
     const transport = Tone.getTransport();
-    transport.bpm.value = bpm;
-    this.currentBpm = bpm;
-    const secPerBeat = 60 / bpm;
+    transport.bpm.value = safeBpm;
+    this.currentBpm = safeBpm;
+    const secPerBeat = 60 / safeBpm;
     const midiActive = !!getSelectedOutput();
     const internalOn = this.monitorInternal || !midiActive;
 

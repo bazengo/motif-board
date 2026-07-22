@@ -603,7 +603,9 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'music-composition-suite',
-      version: 5,
+      // NOTE: bump this whenever a backfill is added below, or existing saves
+      // never receive it (that shipped mixes with an undefined tempo).
+      version: 6,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {

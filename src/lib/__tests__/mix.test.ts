@@ -9,6 +9,23 @@ describe('mixBpm', () => {
   it('uses its own tempo when unlocked', () => {
     expect(mixBpm(testMix({ lockBpm: false, bpm: 90 }), 140)).toBe(90);
   });
+
+  // Saves made before mix tempo existed carry undefined here. Letting that
+  // through set the transport to NaN and silenced the mix completely.
+  it('falls back to the project tempo when the mix predates mix tempo', () => {
+    const legacy = { ...testMix(), lockBpm: undefined, bpm: undefined } as never;
+    expect(mixBpm(legacy, 140)).toBe(140);
+  });
+
+  it('falls back when an unlocked mix has no usable bpm', () => {
+    const broken = { ...testMix({ lockBpm: false }), bpm: undefined } as never;
+    expect(mixBpm(broken, 140)).toBe(140);
+  });
+
+  it('never returns a non-finite tempo', () => {
+    const broken = { ...testMix({ lockBpm: false }), bpm: NaN } as never;
+    expect(Number.isFinite(mixBpm(broken, NaN as never))).toBe(true);
+  });
 });
 
 describe('layerLevels', () => {

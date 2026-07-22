@@ -1,8 +1,15 @@
 import type { Brick, Mix, MixLayer } from '../types';
 
-/** The rate a mix plays at: the project tempo, or its own override. */
+/**
+ * The rate a mix plays at: the project tempo, or its own override.
+ * Falls back to the project tempo if the mix has no usable bpm — saves made
+ * before mix tempo existed can carry undefined here, and letting that through
+ * set the transport to NaN and silenced playback entirely.
+ */
 export function mixBpm(mix: Mix, globalBpm: number): number {
-  return mix.lockBpm ? globalBpm : mix.bpm;
+  const fallback = Number.isFinite(globalBpm) && globalBpm > 0 ? globalBpm : 120;
+  if (mix.lockBpm !== false) return fallback;
+  return Number.isFinite(mix.bpm) && mix.bpm > 0 ? mix.bpm : fallback;
 }
 
 /** Effective gain for a layer, accounting for mute and any active solo. */
