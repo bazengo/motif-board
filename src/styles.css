@@ -293,6 +293,8 @@
   height: 18px;
   border-bottom: 1px solid #2c313d;
   margin-bottom: 6px;
+  /* scrubbing drags across the time codes — don't let them highlight */
+  user-select: none;
 }
 .tl-tick {
   position: absolute;
