@@ -3,6 +3,7 @@ import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
 import { mixAllItems, mixBpm } from '../lib/mix';
 import { MIX_W } from '../layout';
+import { tagsForMix, matchesTags } from '../lib/tags';
 import type { Mix } from '../types';
 
 export function MixNode({ mix }: { mix: Mix }) {
@@ -14,7 +15,10 @@ export function MixNode({ mix }: { mix: Mix }) {
   const updateMix = useStore((s) => s.updateMix);
   const deleteMix = useStore((s) => s.deleteMix);
 
+  const activeTags = useStore((s) => s.activeTags);
   const members = mix.layers.length;
+  const matches = matchesTags(tagsForMix(mix), activeTags);
+  const filtering = activeTags.length > 0;
 
   function onHandleDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
@@ -92,7 +96,11 @@ export function MixNode({ mix }: { mix: Mix }) {
 
   return (
     <div
-      className={'mix-node' + (active ? ' active' : '')}
+      className={
+        'mix-node' +
+        (active ? ' active' : '') +
+        (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
+      }
       style={{ left: mix.board.x, top: mix.board.y, width: MIX_W, borderColor: mix.color }}
       onPointerDown={() => setActiveMix(mix.id)}
     >

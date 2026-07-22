@@ -4,6 +4,7 @@ import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
+import { tagsForBrick, matchesTags } from '../lib/tags';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -22,11 +23,12 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const mixes = useStore((s) => s.mixes);
   const toggleBrickInMix = useStore((s) => s.toggleBrickInMix);
 
+  const activeTags = useStore((s) => s.activeTags);
   const [menu, setMenu] = useState<null | 'main' | 'mix' | 'parent'>(null);
   const d = brick.display;
-  const memberMixIds = mixes.filter((m) =>
-    m.layers.some((l) => l.brickId === brick.id)
-  );
+  const myTags = tagsForBrick(brick, mixes);
+  const matches = matchesTags(myTags, activeTags);
+  const filtering = activeTags.length > 0;
 
   function setDisplay(patch: Partial<BrickDisplay>) {
     updateBrick(brick.id, { display: { ...brick.display, ...patch } });
@@ -147,7 +149,10 @@ export function BrickCard({ brick }: { brick: Brick }) {
 
   return (
     <div
-      className="brick-card"
+      className={
+        'brick-card' +
+        (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
+      }
       data-brick={brick.id}
       style={{
         left: brick.board.x,
@@ -328,11 +333,19 @@ export function BrickCard({ brick }: { brick: Brick }) {
         </div>
       )}
 
-      {memberMixIds.length > 0 && (
+      {myTags.length > 0 && (
         <div className="brick-mixtags">
-          {memberMixIds.map((m) => (
-            <span key={m.id} className="brick-mixtag" style={{ background: m.color }}>
-              {m.name}
+          {myTags.map((t) => (
+            <span
+              key={t.id}
+              className={'brick-mixtag' + (t.kind === 'text' ? ' text-tag' : '')}
+              style={
+                t.kind === 'mix'
+                  ? { background: t.color }
+                  : { borderColor: t.color, color: t.color }
+              }
+            >
+              {t.label}
             </span>
           ))}
         </div>

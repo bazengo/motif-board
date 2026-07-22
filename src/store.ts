@@ -172,6 +172,8 @@ interface AppState {
   grid: number;
   /** Copied notes, stored relative to the earliest one. */
   clipboard: { dp: number; start: number; duration: number; velocity: number }[];
+  /** Tag ids currently filtering the board (empty = show everything). */
+  activeTags: string[];
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -234,6 +236,8 @@ interface AppState {
   setSnapToScale: (v: boolean) => void;
   setShowNoteNames: (v: boolean) => void;
   setGrid: (v: number) => void;
+  toggleTag: (id: string) => void;
+  clearTags: () => void;
   copyNotes: (brickId: string, noteIds: string[], cut?: boolean) => void;
   pasteNotes: (brickId: string) => string[];
   quantize: (brickId: string, noteIds: string[] | null, grid: number) => void;
@@ -256,6 +260,7 @@ export const useStore = create<AppState>()(
       showNoteNames: false,
       grid: 0.25,
       clipboard: [],
+      activeTags: [],
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -564,6 +569,14 @@ export const useStore = create<AppState>()(
       setSnapToScale: (v) => set({ snapToScale: v }),
       setShowNoteNames: (v) => set({ showNoteNames: v }),
       setGrid: (v) => set({ grid: v }),
+
+      toggleTag: (id) =>
+        set((s) => ({
+          activeTags: s.activeTags.includes(id)
+            ? s.activeTags.filter((t) => t !== id)
+            : [...s.activeTags, id],
+        })),
+      clearTags: () => set({ activeTags: [] }),
 
       copyNotes: (brickId, noteIds, cut = false) => {
         const s = useStore.getState();
