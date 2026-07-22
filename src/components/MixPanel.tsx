@@ -3,6 +3,7 @@ import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
 import { mixAllItems, mixBpm } from '../lib/mix';
 import { InfoTip } from './InfoTip';
+import { MIX_COLORS } from '../types';
 
 export function MixPanel() {
   const mixes = useStore((s) => s.mixes);
@@ -72,6 +73,18 @@ export function MixPanel() {
             ■
           </button>
         </div>
+      </div>
+
+      <div className="mix-swatches" title="Mix colour">
+        {MIX_COLORS.map((c) => (
+          <button
+            key={c}
+            className={'swatch' + (mix.color === c ? ' on' : '')}
+            style={{ background: c }}
+            onClick={() => updateMix(mix.id, { color: c })}
+            aria-label={`Set mix colour ${c}`}
+          />
+        ))}
       </div>
 
       <div className="mix-tempo">
