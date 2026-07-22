@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { Note as TonalNote } from 'tonal';
-import type { Brick, InstrumentId } from '../types';
+import type { Brick, InstrumentId, Mix } from '../types';
+import { layerLevels } from '../lib/mix';
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
 import type { ScheduledNote } from '../lib/timeline';
@@ -89,13 +90,15 @@ interface Voice {
   instrument: InstrumentId;
   loop: boolean;
   lengthBeats: number;
+  level: number; // current effective gain (0 = muted/not soloed)
   sig: string;
 }
 
 type PlayItem = { brick: Brick; loop: boolean; gain: number };
 
 function gainToDb(gain: number): number {
-  if (gain <= 0.0001) return -Infinity;
+  // floor rather than -Infinity so the value can be ramped smoothly
+  if (gain <= 0.001) return -60;
   return 20 * Math.log10(gain);
 }
 
@@ -107,6 +110,7 @@ class AudioEngine {
   private currentBpm = 120;
   private usedChannels = new Set<number>();
   private previewSynths = new Map<InstrumentId, Voiceable>();
+  private activeMixId: string | null = null;
 
   monitorInternal = true;
 
@@ -145,6 +149,7 @@ class AudioEngine {
   private sendMidi(voice: Voice, pitch: number, durSec: number, _time: number, vel: number) {
     const out = getSelectedOutput();
     if (!out) return;
+    if (voice.level <= 0.001) return; // muted / not soloed
     // Tone fires this callback at (audio) event time already, so send the
     // note-on immediately — same path that works for note preview — and
     // schedule the note-off in the performance.now() domain the port expects.
@@ -161,11 +166,13 @@ class AudioEngine {
     }, events);
   }
 
-  /** Play a set of bricks together at `bpm`. */
-  async play(items: PlayItem[], bpm: number) {
+  /** Play a set of bricks together at `bpm`. Pass `mixId` so later gain /
+   *  mute / solo changes to that mix can be applied live. */
+  async play(items: PlayItem[], bpm: number, mixId?: string) {
     await this.ensureStarted();
     this.stop();
     if (items.length === 0) return;
+    this.activeMixId = mixId ?? null;
 
     const transport = Tone.getTransport();
     transport.bpm.value = bpm;
@@ -200,6 +207,7 @@ class AudioEngine {
         instrument: brick.instrument,
         loop,
         lengthBeats: brick.lengthBeats,
+        level: gain,
         sig: brickSignature(brick),
       };
 
@@ -283,6 +291,7 @@ class AudioEngine {
         instrument: brick.instrument,
         loop: false,
         lengthBeats: brick.lengthBeats,
+        level: 1,
         sig: brickSignature(brick),
       };
 
@@ -352,6 +361,28 @@ class AudioEngine {
     }
   }
 
+  /**
+   * Live mixing: push the playing mix's gain / mute / solo straight onto the
+   * running voices, so faders move the sound without restarting playback.
+   */
+  syncMixLevels(mixes: Mix[]) {
+    if (this.voices.size === 0 || !this.activeMixId) return;
+    const mix = mixes.find((m) => m.id === this.activeMixId);
+    if (!mix) return;
+    const levels = layerLevels(mix);
+    for (const [brickId, level] of levels) {
+      const voice = this.voices.get(brickId);
+      if (!voice) continue;
+      voice.level = level; // also gates MIDI-out for muted layers
+      if (!voice.volume) continue;
+      const db = gainToDb(level);
+      if (Math.abs(voice.volume.volume.value - db) > 0.01) {
+        // short ramp avoids zipper noise while dragging a fader
+        voice.volume.volume.rampTo(db, 0.05);
+      }
+    }
+  }
+
   /** Audition a single pitch (used when placing notes). */
   async preview(pitch: number, instrument: InstrumentId, gain = 0.8) {
     await this.ensureStarted();
@@ -394,6 +425,7 @@ class AudioEngine {
     }
     this.voices.clear();
     this.usedChannels.clear();
+    this.activeMixId = null;
     this.emit(false);
   }
 }

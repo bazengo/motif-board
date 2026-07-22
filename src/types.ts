@@ -108,6 +108,13 @@ export interface Mix {
   color: string;
   board: { x: number; y: number };
   layers: MixLayer[];
+  /** Freeform notes about the mix (arrangement ideas, intent, etc.). */
+  notes: string;
+  /** true = play at the project tempo; false = play at this mix's own `bpm`.
+   *  Either way member bricks keep their own stored bpm — this only changes
+   *  the rate they're played back at. */
+  lockBpm: boolean;
+  bpm: number;
 }
 
 /** One placed mix on the arrangement timeline. Sections play in order; each

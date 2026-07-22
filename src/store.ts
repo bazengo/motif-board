@@ -59,6 +59,9 @@ export function makeMix(partial: Partial<Mix> = {}): Mix {
     color,
     board: { x: 520, y: 60 },
     layers: [],
+    notes: '',
+    lockBpm: true,
+    bpm: 120,
     ...partial,
   };
 }
@@ -484,12 +487,14 @@ export const useStore = create<AppState>()(
 
       addTimelineSection: (mixId, atIndex) => {
         const s = useStore.getState();
+        const mix = s.mixes.find((m) => m.id === mixId);
         const section: TimelineSection = {
           id: nanoid(8),
           mixId,
           repeats: 1,
-          lockBpm: true,
-          bpm: s.globalBpm,
+          // inherit the mix's own tempo setting as the starting point
+          lockBpm: mix?.lockBpm ?? true,
+          bpm: mix && !mix.lockBpm ? mix.bpm : s.globalBpm,
           timeSig: { num: 4, den: 4 },
         };
         set((st) => {
@@ -568,6 +573,15 @@ export const useStore = create<AppState>()(
           timeSig: b.timeSig ?? { num: 4, den: 4 },
           percussion: b.percussion ?? false,
         }));
+        // backfill mix fields added over time
+        if (state.mixes) {
+          state.mixes = state.mixes.map((m) => ({
+            ...m,
+            notes: m.notes ?? '',
+            lockBpm: m.lockBpm ?? true,
+            bpm: m.bpm ?? 120,
+          }));
+        }
         // v1 -> v2: single `mix` becomes a list of named mixes
         if (version < 2) {
           const legacy = state.mix ?? [];

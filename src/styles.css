@@ -640,6 +640,30 @@
   color: #8a92a3;
   line-height: 1.5;
 }
+.mix-tempo {
+  background: #12151b;
+  border: 1px solid #2b303b;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mix-hint.small {
+  font-size: 11px;
+  margin: 0;
+}
+.mix-notes {
+  width: 100%;
+  background: #12151b;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 7px;
+  padding: 8px;
+  font-size: 13px;
+  resize: vertical;
+}
 .mix-layers {
   display: flex;
   flex-direction: column;

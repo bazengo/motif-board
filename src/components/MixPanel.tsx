@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
-import { mixPlayItems } from '../lib/mix';
+import { mixAllItems, mixBpm } from '../lib/mix';
 
 export function MixPanel() {
   const mixes = useStore((s) => s.mixes);
@@ -10,6 +10,7 @@ export function MixPanel() {
   const globalBpm = useStore((s) => s.globalBpm);
   const setActiveMix = useStore((s) => s.setActiveMix);
   const addMix = useStore((s) => s.addMix);
+  const updateMix = useStore((s) => s.updateMix);
   const updateLayer = useStore((s) => s.updateLayer);
   const toggleBrickInMix = useStore((s) => s.toggleBrickInMix);
 
@@ -38,8 +39,8 @@ export function MixPanel() {
     .filter((x) => x.brick);
 
   function playMix() {
-    const items = mixPlayItems(mix!, bricks);
-    if (items.length) engine.play(items, globalBpm);
+    const items = mixAllItems(mix!, bricks);
+    if (items.length) engine.play(items, mixBpm(mix!, globalBpm), mix!.id);
   }
 
   return (
@@ -72,10 +73,40 @@ export function MixPanel() {
         </div>
       </div>
 
+      <div className="mix-tempo">
+        <label className="tl-check">
+          <input
+            type="checkbox"
+            checked={mix.lockBpm}
+            onChange={(e) => updateMix(mix.id, { lockBpm: e.target.checked })}
+          />
+          Lock to project tempo
+        </label>
+        <label className="tl-field">
+          Mix BPM
+          <input
+            type="number"
+            min={20}
+            max={300}
+            value={mixBpm(mix, globalBpm)}
+            disabled={mix.lockBpm}
+            onChange={(e) =>
+              updateMix(mix.id, {
+                bpm: Math.max(20, Math.min(300, Number(e.target.value) || 120)),
+              })
+            }
+          />
+        </label>
+        <p className="mix-hint small">
+          Plays member bricks at this rate — their own stored tempos aren't
+          changed.
+        </p>
+      </div>
+
       {rows.length === 0 && (
         <p className="mix-hint">
           Empty. Add bricks with <em>Mix ▾</em> on a card, or drag a card onto
-          this mix's node. Plays at the project tempo ({globalBpm} BPM).
+          this mix's node.
         </p>
       )}
 
@@ -131,6 +162,15 @@ export function MixPanel() {
           </div>
         ))}
       </div>
+
+      <label className="side-label">Mix notes</label>
+      <textarea
+        className="mix-notes"
+        rows={3}
+        placeholder="Arrangement ideas, intent, what this mix is for…"
+        value={mix.notes}
+        onChange={(e) => updateMix(mix.id, { notes: e.target.value })}
+      />
 
       {rows.length > 0 && (
         <button

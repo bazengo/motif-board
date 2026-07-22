@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
-import { mixPlayItems } from '../lib/mix';
+import { mixAllItems, mixBpm } from '../lib/mix';
 import { MIX_W } from '../layout';
 import type { Mix } from '../types';
 
@@ -33,8 +33,8 @@ export function MixNode({ mix }: { mix: Mix }) {
   }
 
   function play() {
-    const items = mixPlayItems(mix, bricks);
-    if (items.length) engine.play(items, globalBpm);
+    const items = mixAllItems(mix, bricks);
+    if (items.length) engine.play(items, mixBpm(mix, globalBpm), mix.id);
   }
 
   // Drag this mix down onto the timeline strip to append/insert a section.

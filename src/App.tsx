@@ -35,9 +35,14 @@ function App() {
   useEffect(() => initHistory(), []);
   useEffect(() => onHistory(() => forceHistory((n) => n + 1)), []);
 
-  // Live editing: push brick changes into currently-playing voices.
+  // Live editing + live mixing: push brick edits and fader/mute/solo changes
+  // into currently-playing voices without restarting playback.
   useEffect(
-    () => useStore.subscribe((state) => engine.syncLive(state.bricks)),
+    () =>
+      useStore.subscribe((state) => {
+        engine.syncLive(state.bricks);
+        engine.syncMixLevels(state.mixes);
+      }),
     []
   );
 
