@@ -13,6 +13,7 @@ export function MixPanel() {
   const setActiveMix = useStore((s) => s.setActiveMix);
   const addMix = useStore((s) => s.addMix);
   const updateMix = useStore((s) => s.updateMix);
+  const openEditor = useStore((s) => s.openEditor);
   const updateLayer = useStore((s) => s.updateLayer);
   const toggleBrickInMix = useStore((s) => s.toggleBrickInMix);
 
@@ -134,6 +135,13 @@ export function MixPanel() {
               {brick!.name}
             </span>
             <div className="mix-buttons">
+              <button
+                className="tag-btn"
+                onClick={() => openEditor(l.brickId)}
+                title="Open this brick in the editor"
+              >
+                ✎
+              </button>
               <button
                 className={'tag-btn' + (l.loop ? ' on' : '')}
                 onClick={() => updateLayer(mix.id, l.brickId, { loop: !l.loop })}
