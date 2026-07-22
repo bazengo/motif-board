@@ -2,6 +2,7 @@ import { Midi } from '@tonejs/midi';
 import { nanoid } from 'nanoid';
 import type { Brick, Note } from '../types';
 import { makeBrick } from '../store';
+import { DRUM_CHANNEL } from './drums';
 
 function download(bytes: Uint8Array, filename: string) {
   const buf = new ArrayBuffer(bytes.byteLength);
@@ -27,6 +28,7 @@ export function exportBrick(brick: Brick) {
   midi.header.setTempo(brick.bpm);
   const track = midi.addTrack();
   track.name = brick.name;
+  if (brick.percussion) track.channel = DRUM_CHANNEL;
   const secPerBeat = 60 / brick.bpm;
   for (const n of brick.notes) {
     track.addNote({
@@ -47,6 +49,7 @@ export function exportMix(bricks: Brick[], bpm: number, filename = 'mix.mid') {
   for (const brick of bricks) {
     const track = midi.addTrack();
     track.name = brick.name;
+    if (brick.percussion) track.channel = DRUM_CHANNEL;
     for (const n of brick.notes) {
       track.addNote({
         midi: n.pitch,
@@ -83,6 +86,7 @@ export async function importMidi(file: File): Promise<Brick[]> {
       makeBrick({
         name: track.name || `${base}${midi.tracks.length > 1 ? ` ${i + 1}` : ''}`,
         notes,
+        percussion: track.channel === DRUM_CHANNEL,
         bpm: Math.round(bpm),
         lengthBeats,
       })

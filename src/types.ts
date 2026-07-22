@@ -76,6 +76,8 @@ export interface Brick {
   board: { x: number; y: number; rotation: number }; // corkboard placement
   parentId: string | null; // leitmotif lineage — which brick this iterates from
   display: BrickDisplay;
+  /** Drum brick: roll rows are GM drum sounds and MIDI goes out on channel 10. */
+  percussion: boolean;
 }
 
 export const TIME_SIGNATURES: { num: number; den: number }[] = [

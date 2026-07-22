@@ -293,12 +293,17 @@
 .icon-btn:hover {
   background: rgba(0, 0, 0, 0.12);
 }
-.link-handle {
+.link-handle,
+.branch-handle {
   cursor: crosshair;
   touch-action: none;
   font-weight: 700;
 }
-.link-handle:hover {
+.branch-handle {
+  font-size: 11px;
+}
+.link-handle:hover,
+.branch-handle:hover {
   background: rgba(0, 0, 0, 0.2);
 }
 .brick-title {
@@ -821,6 +826,19 @@
   fill: #9aa3b2;
   font-size: 9px;
   font-family: monospace;
+}
+.roll-drumlabel {
+  fill: #b7bfce;
+  font-size: 9px;
+  pointer-events: none;
+}
+/* small name drawn on each note block */
+.roll-notename {
+  fill: rgba(0, 0, 0, 0.65);
+  font-size: 9px;
+  font-family: monospace;
+  pointer-events: none;
+  user-select: none;
 }
 .roll-grid-wrap {
   flex-shrink: 0;

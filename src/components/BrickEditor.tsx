@@ -184,6 +184,20 @@ export function BrickEditor() {
             </select>
           </label>
 
+          <label className="fld percussion-fld" title="Drum brick: roll rows become GM drum sounds and MIDI goes out on channel 10">
+            Mode
+            <label className="audition-toggle">
+              <input
+                type="checkbox"
+                checked={brick.percussion}
+                onChange={(e) =>
+                  updateBrick(brick.id, { percussion: e.target.checked })
+                }
+              />
+              🥁 Percussion
+            </label>
+          </label>
+
           <div className="editor-head-actions">
             <button className="primary-btn" onClick={() => engine.playBrick(brick)}>
               ▶ Play

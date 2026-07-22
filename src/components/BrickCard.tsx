@@ -3,7 +3,7 @@ import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
-import { MIX_W, MIX_H } from '../layout';
+import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -13,6 +13,10 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const duplicateBrick = useStore((s) => s.duplicateBrick);
   const branchBrick = useStore((s) => s.branchBrick);
   const setParent = useStore((s) => s.setParent);
+  const releaseChildren = useStore((s) => s.releaseChildren);
+  const childCount = useStore(
+    (s) => s.bricks.filter((b) => b.parentId === brick.id).length
+  );
   const moveBrick = useStore((s) => s.moveBrick);
   const openEditor = useStore((s) => s.openEditor);
   const mixes = useStore((s) => s.mixes);
@@ -43,47 +47,90 @@ export function BrickCard({ brick }: { brick: Brick }) {
     window.addEventListener('pointerup', up);
   }
 
-  // Dedicated "drag to a mix" handle: draws a live line to the cursor and
-  // connects to whatever mix node it's dropped on. Doesn't move the card.
-  function onLinkDown(e: React.PointerEvent) {
+  // Dedicated drag handles that draw a live line to the cursor without moving
+  // the card. 'mix' drops onto a mix node to join it; 'branch' spawns a child
+  // iteration where you drop it (or adopts the brick you drop it on).
+  function startLink(e: React.PointerEvent, kind: 'mix' | 'branch') {
     if (e.button !== 0) return;
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     const board = document.querySelector('.board') as HTMLElement | null;
+    if (!board) return;
     const toContent = (ev: PointerEvent | React.PointerEvent) => {
-      const r = board!.getBoundingClientRect();
+      const r = board.getBoundingClientRect();
       return {
-        x: ev.clientX - r.left + board!.scrollLeft,
-        y: ev.clientY - r.top + board!.scrollTop,
+        x: ev.clientX - r.left + board.scrollLeft,
+        y: ev.clientY - r.top + board.scrollTop,
       };
     };
-    const { setLinking, toggleBrickInMix: join } = useStore.getState();
+    const { setLinking } = useStore.getState();
     const p0 = toContent(e);
-    setLinking({ brickId: brick.id, x: p0.x, y: p0.y });
+    setLinking({ brickId: brick.id, x: p0.x, y: p0.y, kind });
     const move = (ev: PointerEvent) => {
       const p = toContent(ev);
-      setLinking({ brickId: brick.id, x: p.x, y: p.y });
+      setLinking({ brickId: brick.id, x: p.x, y: p.y, kind });
     };
-    const up = (ev: PointerEvent) => {
+    const cleanup = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', cancel);
+    };
+    // never leave a dangling live line if the drag is interrupted
+    function cancel() {
+      cleanup();
+      useStore.getState().setLinking(null);
+    }
+    const up = (ev: PointerEvent) => {
+      cleanup();
       const p = toContent(ev);
-      const { mixes: mxs } = useStore.getState();
-      for (const m of mxs) {
-        if (
-          p.x >= m.board.x &&
-          p.x <= m.board.x + MIX_W &&
-          p.y >= m.board.y &&
-          p.y <= m.board.y + MIX_H
-        ) {
-          if (!m.layers.some((l) => l.brickId === brick.id)) join(m.id, brick.id);
-          break;
+      const st = useStore.getState();
+
+      if (kind === 'mix') {
+        for (const m of st.mixes) {
+          if (
+            p.x >= m.board.x &&
+            p.x <= m.board.x + MIX_W &&
+            p.y >= m.board.y &&
+            p.y <= m.board.y + MIX_H
+          ) {
+            if (!m.layers.some((l) => l.brickId === brick.id))
+              st.toggleBrickInMix(m.id, brick.id);
+            break;
+          }
+        }
+      } else {
+        // dropped on another brick? adopt it as a child (cycle-guarded by
+        // setParent). Otherwise spawn a fresh iteration at the drop point.
+        const desc = descendantIds(st.bricks, brick.id);
+        const target = st.bricks.find(
+          (b) =>
+            b.id !== brick.id &&
+            !desc.has(b.id) &&
+            p.x >= b.board.x &&
+            p.x <= b.board.x + CARD_W &&
+            p.y >= b.board.y &&
+            p.y <= b.board.y + CARD_H
+        );
+        if (target) {
+          st.setParent(target.id, brick.id);
+        } else {
+          const childId = st.branchBrick(brick.id);
+          if (childId) {
+            st.moveBrick(
+              childId,
+              Math.max(0, p.x - CARD_W / 2),
+              Math.max(0, p.y - 10)
+            );
+          }
         }
       }
       useStore.getState().setLinking(null);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', cancel);
   }
 
   // eligible new parents: not self, not a descendant (avoid cycles)
@@ -116,9 +163,16 @@ export function BrickCard({ brick }: { brick: Brick }) {
           <button
             className="icon-btn link-handle"
             title="Drag onto a mix node to add this brick"
-            onPointerDown={onLinkDown}
+            onPointerDown={(e) => startLink(e, 'mix')}
           >
             ⇢
+          </button>
+          <button
+            className="icon-btn branch-handle"
+            title="Drag to empty space to spawn an iteration — or onto another brick to adopt it as a child"
+            onPointerDown={(e) => startLink(e, 'branch')}
+          >
+            🌱
           </button>
           <button
             className="icon-btn"
@@ -217,11 +271,21 @@ export function BrickCard({ brick }: { brick: Brick }) {
 
       {menu === 'parent' && (
         <div className="brick-menu" style={menuStyle} onMouseLeave={() => setMenu(null)}>
-          <div className="menu-section">Lineage parent</div>
-          <button onClick={() => { setParent(brick.id, null); setMenu(null); }}>
-            ⛌ Orphan (make root)
+          <div className="menu-section">Lineage</div>
+          <button
+            disabled={!brick.parentId}
+            onClick={() => { setParent(brick.id, null); setMenu(null); }}
+          >
+            ⛌ Detach from parent
+          </button>
+          <button
+            disabled={childCount === 0}
+            onClick={() => { releaseChildren(brick.id); setMenu(null); }}
+          >
+            ⛌ Release {childCount} child{childCount === 1 ? '' : 'ren'}
           </button>
           <div className="menu-divider" />
+          <div className="menu-section">Set parent to</div>
           <div className="menu-scroll">
             {parentCandidates.length === 0 && <div className="menu-empty">No other bricks.</div>}
             {parentCandidates.map((b) => (

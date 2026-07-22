@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { scalePitchClasses } from '../lib/theory';
 import { midiToName, engine } from '../audio/engine';
+import { DRUM_PITCHES, drumName, drumShortName } from '../lib/drums';
 import type { Note } from '../types';
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -14,8 +15,13 @@ const STEPS_PER_BEAT = 4;
 const STEP_W = BEAT_W / STEPS_PER_BEAT;
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
-const rowCount = PITCH_HIGH - PITCH_LOW + 1;
 const LANE_H = 60;
+
+/** Melodic rows are a contiguous chromatic range, high pitch first. */
+const MELODIC_PITCHES: number[] = Array.from(
+  { length: PITCH_HIGH - PITCH_LOW + 1 },
+  (_, i) => PITCH_HIGH - i
+);
 
 function snapBeat(raw: number): number {
   return Math.round(raw * STEPS_PER_BEAT) / STEPS_PER_BEAT;
@@ -29,7 +35,7 @@ type Drag =
       type: 'move' | 'resize';
       primaryId: string;
       downBeat: number;
-      downPitch: number;
+      downRow: number;
       origs: Map<string, Orig>;
       lastPreview: number;
     }
@@ -38,7 +44,7 @@ type Drag =
       x0: number;
       y0: number;
       startBeat: number;
-      startPitch: number;
+      startRow: number;
       additive: boolean;
       moved: boolean;
     };
@@ -66,6 +72,8 @@ export function PianoRoll({
   const deleteTemplate = useStore((s) => s.deleteTemplate);
   const snapToScale = useStore((s) => s.snapToScale);
   const setSnapToScale = useStore((s) => s.setSnapToScale);
+  const showNoteNames = useStore((s) => s.showNoteNames);
+  const setShowNoteNames = useStore((s) => s.setShowNoteNames);
   const activeTemplate = templates.find((t) => t.id === activeBrush) ?? null;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -115,19 +123,37 @@ export function PianoRoll({
     [brick?.key]
   );
 
+  // Rows are a pitch list (high first). Melodic bricks use a chromatic range;
+  // percussion bricks use the GM drum map, plus any stray pitches already in
+  // the brick so notes never become invisible when you flip the mode.
+  const percussion = brick?.percussion ?? false;
+  const pitches = useMemo(() => {
+    if (!percussion) return MELODIC_PITCHES;
+    const set = new Set<number>(DRUM_PITCHES);
+    for (const n of brick?.notes ?? []) set.add(n.pitch);
+    return [...set].sort((a, b) => b - a);
+  }, [percussion, brick?.notes]);
+
+  const rowIndex = useMemo(() => {
+    const m = new Map<number, number>();
+    pitches.forEach((p, i) => m.set(p, i));
+    return m;
+  }, [pitches]);
+
+  const rowCount = pitches.length;
   const width = (brick?.lengthBeats ?? 8) * BEAT_W;
   const height = rowCount * ROW_H;
+
+  const pitchOfRow = (row: number) =>
+    pitches[Math.max(0, Math.min(pitches.length - 1, row))];
+  const rowOfPitch = (p: number) => rowIndex.get(p) ?? 0;
 
   function coords(e: PointerEvent | React.PointerEvent) {
     const rect = svgRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    return {
-      x,
-      y,
-      beat: x / BEAT_W,
-      pitch: PITCH_HIGH - Math.floor(y / ROW_H),
-    };
+    const row = Math.floor(y / ROW_H);
+    return { x, y, beat: x / BEAT_W, row, pitch: pitchOfRow(row) };
   }
 
   useEffect(() => {
@@ -161,19 +187,25 @@ export function PianoRoll({
       const minStart = Math.min(...origVals.map((o) => o.start));
       if (minStart + deltaBeat < 0) deltaBeat = -minStart;
 
-      let deltaPitch = c.pitch - d.downPitch;
-      const minP = Math.min(...origVals.map((o) => o.pitch));
-      const maxP = Math.max(...origVals.map((o) => o.pitch));
-      if (minP + deltaPitch < PITCH_LOW) deltaPitch = PITCH_LOW - minP;
-      if (maxP + deltaPitch > PITCH_HIGH) deltaPitch = PITCH_HIGH - maxP;
+      // vertical movement is in ROW space so it works for both the chromatic
+      // grid and the (non-contiguous) drum map
+      let deltaRow = c.row - d.downRow;
+      const origRows = origVals.map((o) => rowOfPitch(o.pitch));
+      const minR = Math.min(...origRows);
+      const maxR = Math.max(...origRows);
+      if (minR + deltaRow < 0) deltaRow = -minR;
+      if (maxR + deltaRow > rowCount - 1) deltaRow = rowCount - 1 - maxR;
 
       const patches: Record<string, Partial<Note>> = {};
       for (const [id, o] of d.origs) {
-        patches[id] = { start: o.start + deltaBeat, pitch: o.pitch + deltaPitch };
+        patches[id] = {
+          start: o.start + deltaBeat,
+          pitch: pitchOfRow(rowOfPitch(o.pitch) + deltaRow),
+        };
       }
       updateNotesBatch(brick.id, patches);
 
-      const newPrimaryPitch = primary.pitch + deltaPitch;
+      const newPrimaryPitch = pitchOfRow(rowOfPitch(primary.pitch) + deltaRow);
       if (audition && newPrimaryPitch !== d.lastPreview) {
         d.lastPreview = newPrimaryPitch;
         engine.preview(newPrimaryPitch, brick.instrument);
@@ -195,21 +227,25 @@ export function PianoRoll({
         } else {
           // plain click on empty grid -> stamp the active brush (phrase or note)
           const start = Math.max(0, d.startBeat);
-          if (d.startPitch >= PITCH_LOW && d.startPitch <= PITCH_HIGH) {
+          if (d.startRow >= 0 && d.startRow < rowCount) {
+            const anchorPitch = pitchOfRow(d.startRow);
             const st = useStore.getState();
             const tpl = st.activeBrush
               ? st.templates.find((t) => t.id === st.activeBrush)
               : null;
             if (tpl && tpl.notes.length) {
               const b2 = st.bricks.find((x) => x.id === brick.id);
+              // scale-snapping is meaningless on a drum map
               const set =
-                st.snapToScale && b2 ? scalePitchClasses(b2.key) : null;
+                st.snapToScale && b2 && !b2.percussion
+                  ? scalePitchClasses(b2.key)
+                  : null;
               st.addNotes(
                 brick.id,
                 tpl.notes.map((n) => {
                   let p = Math.max(
                     PITCH_LOW,
-                    Math.min(PITCH_HIGH, d.startPitch + n.dp)
+                    Math.min(PITCH_HIGH, anchorPitch + n.dp)
                   );
                   if (set) p = nearestInScale(p, set);
                   return {
@@ -222,13 +258,13 @@ export function PianoRoll({
               );
             } else {
               addNote(brick.id, {
-                pitch: d.startPitch,
+                pitch: anchorPitch,
                 start,
                 duration: lastDur,
                 velocity: 0.8,
               });
             }
-            if (audition) engine.preview(d.startPitch, brick.instrument);
+            if (audition) engine.preview(anchorPitch, brick.instrument);
             setSelected(new Set());
           }
         }
@@ -254,7 +290,7 @@ export function PianoRoll({
       x0: c.x,
       y0: c.y,
       startBeat: snapBeat(c.beat),
-      startPitch: c.pitch,
+      startRow: c.row,
       additive: e.shiftKey,
       moved: false,
     };
@@ -270,7 +306,7 @@ export function PianoRoll({
         type: 'resize',
         primaryId: id,
         downBeat: 0,
-        downPitch: 0,
+        downRow: 0,
         origs: new Map([[id, { start: n.start, pitch: n.pitch, duration: n.duration }]]),
         lastPreview: n.pitch,
       };
@@ -304,7 +340,7 @@ export function PianoRoll({
       type: 'move',
       primaryId: id,
       downBeat: c.beat,
-      downPitch: c.pitch,
+      downRow: c.row,
       origs,
       lastPreview: n.pitch,
     };
@@ -358,12 +394,16 @@ export function PianoRoll({
     requestAnimationFrame(() => renameRef.current?.select());
   }
 
-  const rows = [];
-  for (let i = 0; i < rowCount; i++) {
-    const pitch = PITCH_HIGH - i;
+  const rows = pitches.map((pitch, i) => {
     const pc = ((pitch % 12) + 12) % 12;
-    rows.push({ i, pitch, pc, inScale: scaleSet.has(pc), black: BLACK.has(pc) });
-  }
+    return {
+      i,
+      pitch,
+      pc,
+      inScale: !percussion && scaleSet.has(pc),
+      black: !percussion && BLACK.has(pc),
+    };
+  });
 
   const beatLines = [];
   for (let b = 0; b <= brick.lengthBeats; b++) beatLines.push(b);
@@ -421,6 +461,14 @@ export function PianoRoll({
           </label>
         </>
       )}
+      <label className="brush-check" title="Draw note names on the note blocks">
+        <input
+          type="checkbox"
+          checked={showNoteNames}
+          onChange={(e) => setShowNoteNames(e.target.checked)}
+        />
+        Note names
+      </label>
       <span className="brush-spacer" />
       <button
         className="ghost-btn brush-btn"
@@ -453,22 +501,28 @@ export function PianoRoll({
       }}
     >
       <div className="roll-inner" style={{ height }}>
-        <svg className="roll-keys" width={48} height={height}>
+        <svg className="roll-keys" width={percussion ? 116 : 48} height={height}>
           {rows.map((r) => (
             <g key={r.i}>
               <rect
                 x={0}
                 y={r.i * ROW_H}
-                width={48}
+                width={percussion ? 116 : 48}
                 height={ROW_H}
                 fill={r.black ? '#20242e' : '#2e3440'}
                 stroke="#1a1d24"
                 strokeWidth={0.5}
               />
-              {r.pc === 0 && (
-                <text x={6} y={r.i * ROW_H + 12} className="roll-keylabel">
-                  {midiToName(r.pitch)}
+              {percussion ? (
+                <text x={5} y={r.i * ROW_H + 11.5} className="roll-drumlabel">
+                  {drumName(r.pitch)}
                 </text>
+              ) : (
+                r.pc === 0 && (
+                  <text x={6} y={r.i * ROW_H + 12} className="roll-keylabel">
+                    {midiToName(r.pitch)}
+                  </text>
+                )
               )}
             </g>
           ))}
@@ -539,10 +593,13 @@ export function PianoRoll({
               .sort((a, b) => rank(a, selected, hovered) - rank(b, selected, hovered))
               .map((n) => {
                 const x = n.start * BEAT_W;
-                const y = (PITCH_HIGH - n.pitch) * ROW_H;
+                const y = rowOfPitch(n.pitch) * ROW_H;
                 const w = Math.max(6, n.duration * BEAT_W);
                 const isSel = selected.has(n.id);
                 const showHandle = isSel || hovered === n.id;
+                const label = percussion
+                  ? drumShortName(n.pitch)
+                  : midiToName(n.pitch);
                 return (
                   <g
                     key={n.id}
@@ -565,6 +622,16 @@ export function PianoRoll({
                         removeNote(brick.id, n.id);
                       }}
                     />
+                    {showNoteNames && w >= 24 && (
+                      <text
+                        x={x + 3}
+                        y={y + ROW_H - 4.5}
+                        className="roll-notename"
+                        clipPath="inset(0)"
+                      >
+                        {label}
+                      </text>
+                    )}
                     {showHandle && (
                       <rect
                         x={x + w - 5}
@@ -609,7 +676,9 @@ export function PianoRoll({
 
       {/* Velocity lane — bar height = velocity; drag a bar up/down to change it */}
       <div className="vel-lane">
-        <div className="vel-label">Vel</div>
+        <div className="vel-label" style={{ width: percussion ? 116 : 48 }}>
+          Vel
+        </div>
         <div className="vel-scroll" ref={velRef} onScroll={() => syncScroll('vel')}>
           <svg ref={velSvgRef} width={width} height={LANE_H} style={{ display: 'block', touchAction: 'none' }}>
             <line x1={0} y1={LANE_H - 1} x2={width} y2={LANE_H - 1} stroke="#3a4150" />

@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import { Note as TonalNote } from 'tonal';
 import type { Brick, InstrumentId } from '../types';
 import { getSelectedOutput } from './midi-out';
+import { DRUM_CHANNEL } from '../lib/drums';
 
 // Convert a MIDI pitch to a note name Tone understands ("C4", "F#5", ...).
 export function midiToName(midi: number): string {
@@ -172,7 +173,9 @@ class AudioEngine {
     let index = 0;
 
     for (const { brick, loop, gain } of items) {
-      const channel = index % 16;
+      // percussion bricks always use GM channel 10 so drum kits respond;
+      // melodic layers get their own channel so a multi-rack can separate them
+      const channel = brick.percussion ? DRUM_CHANNEL : index % 16;
       this.usedChannels.add(channel);
 
       let volume: Tone.Volume | null = null;

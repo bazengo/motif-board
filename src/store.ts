@@ -43,6 +43,7 @@ export function makeBrick(partial: Partial<Brick> = {}): Brick {
     },
     parentId: null,
     display: { ...DEFAULT_DISPLAY },
+    percussion: false,
     ...partial,
   };
 }
@@ -145,11 +146,17 @@ interface AppState {
   mixes: Mix[];
   activeMixId: string | null;
   // transient: an in-progress "drag to connect" from a brick to the cursor
-  linking: { brickId: string; x: number; y: number } | null;
+  linking: {
+    brickId: string;
+    x: number;
+    y: number;
+    kind: 'mix' | 'branch';
+  } | null;
   // phrase-template "brush" used when clicking the piano roll
   templates: PhraseTemplate[];
   activeBrush: string | null; // template id, or null = single note
   snapToScale: boolean; // remap stamped phrases into the brick's key
+  showNoteNames: boolean; // draw note/drum names on the note blocks
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -158,6 +165,7 @@ interface AppState {
   duplicateBrick: (id: string) => void;
   branchBrick: (id: string) => string | null;
   setParent: (id: string, parentId: string | null) => void;
+  releaseChildren: (id: string) => void;
   moveBrick: (id: string, x: number, y: number) => void;
 
   // selection / editor
@@ -185,7 +193,9 @@ interface AppState {
   setActiveMix: (mixId: string | null) => void;
   toggleBrickInMix: (mixId: string, brickId: string) => void;
   updateLayer: (mixId: string, brickId: string, patch: Partial<MixLayer>) => void;
-  setLinking: (v: { brickId: string; x: number; y: number } | null) => void;
+  setLinking: (
+    v: { brickId: string; x: number; y: number; kind: 'mix' | 'branch' } | null
+  ) => void;
 
   // phrase templates
   addTemplate: (name: string, notes: PhraseTemplate['notes']) => string;
@@ -193,6 +203,7 @@ interface AppState {
   deleteTemplate: (id: string) => void;
   setActiveBrush: (id: string | null) => void;
   setSnapToScale: (v: boolean) => void;
+  setShowNoteNames: (v: boolean) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -208,6 +219,7 @@ export const useStore = create<AppState>()(
       templates: [],
       activeBrush: null,
       snapToScale: false,
+      showNoteNames: false,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -277,6 +289,13 @@ export const useStore = create<AppState>()(
             ),
           };
         }),
+
+      releaseChildren: (id) =>
+        set((s) => ({
+          bricks: s.bricks.map((b) =>
+            b.parentId === id ? { ...b, parentId: null } : b
+          ),
+        })),
 
       moveBrick: (id, x, y) =>
         set((s) => ({
@@ -466,10 +485,11 @@ export const useStore = create<AppState>()(
 
       setActiveBrush: (id) => set({ activeBrush: id }),
       setSnapToScale: (v) => set({ snapToScale: v }),
+      setShowNoteNames: (v) => set({ showNoteNames: v }),
     }),
     {
       name: 'music-composition-suite',
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {
@@ -482,12 +502,13 @@ export const useStore = create<AppState>()(
             }
           | undefined;
         if (!state) return state as never;
-        // v0/v1 -> add brick fields
+        // always backfill brick fields added over time
         state.bricks = (state.bricks ?? []).map((b) => ({
           ...b,
           parentId: b.parentId ?? null,
           display: b.display ?? { ...DEFAULT_DISPLAY },
           timeSig: b.timeSig ?? { num: 4, den: 4 },
+          percussion: b.percussion ?? false,
         }));
         // v1 -> v2: single `mix` becomes a list of named mixes
         if (version < 2) {
@@ -517,6 +538,7 @@ export const useStore = create<AppState>()(
         templates: s.templates,
         activeBrush: s.activeBrush,
         snapToScale: s.snapToScale,
+        showNoteNames: s.showNoteNames,
       }),
     }
   )
