@@ -94,8 +94,8 @@ export function BrickCard({ brick }: { brick: Brick }) {
             p.y >= m.board.y &&
             p.y <= m.board.y + MIX_H
           ) {
-            if (!m.layers.some((l) => l.brickId === brick.id))
-              st.toggleBrickInMix(m.id, brick.id);
+            // dropping on a mix toggles: joins it, or detaches if already a member
+            st.toggleBrickInMix(m.id, brick.id);
             break;
           }
         }
@@ -165,7 +165,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
         <div className="brick-handle-actions">
           <button
             className="icon-btn link-handle"
-            title="Drag onto a mix node to add this brick"
+            title="Drag onto a mix node to add this brick — or drop it on a mix it's already in to detach"
             onPointerDown={(e) => startLink(e, 'mix')}
           >
             ⇢
