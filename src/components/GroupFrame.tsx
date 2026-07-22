@@ -27,10 +27,13 @@ export function GroupFrame({ group }: { group: Group }) {
     const p0 = clientToBoard(e.clientX, e.clientY);
     const offX = p0.x - group.board.x;
     const offY = p0.y - group.board.y;
+    // pin the members now: the frame carries these and only these, so sweeping
+    // it across the board while tidying doesn't collect everything it passes
+    const carried = bricksInGroup(group, bricks).map((b) => b.id);
     (e.target as Element).setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
       const p = clientToBoard(ev.clientX, ev.clientY);
-      moveGroup(group.id, Math.max(0, p.x - offX), Math.max(0, p.y - offY));
+      moveGroup(group.id, Math.max(0, p.x - offX), Math.max(0, p.y - offY), carried);
     };
     const up = () => {
       window.removeEventListener('pointermove', move);

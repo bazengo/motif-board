@@ -199,7 +199,13 @@ interface AppState {
   addGroup: (partial?: Partial<Group>) => string;
   updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
   deleteGroup: (id: string) => void;
-  moveGroup: (id: string, x: number, y: number) => void;
+  moveGroup: (
+    id: string,
+    x: number,
+    y: number,
+    /** Bricks to carry; pinned at drag start so the frame can't collect more. */
+    carryIds?: string[]
+  ) => void;
   resizeGroup: (id: string, w: number, h: number) => void;
 
   // phrase templates
@@ -511,14 +517,20 @@ export const useStore = create<AppState>()(
       deleteGroup: (id) =>
         set((s) => ({ groups: s.groups.filter((g) => g.id !== id) })),
 
-      /** Moving a frame carries whatever sits inside it. */
-      moveGroup: (id, x, y) => {
+      /**
+       * Moving a frame carries whatever sits inside it. `carryIds` pins that
+       * set for the whole drag — recomputing it per frame made the group
+       * scoop up every card it swept over while you were tidying the board.
+       */
+      moveGroup: (id, x, y, carryIds) => {
         const s = useStore.getState();
         const g = s.groups.find((gg) => gg.id === id);
         if (!g) return;
         const dx = x - g.board.x;
         const dy = y - g.board.y;
-        const inside = new Set(bricksInGroup(g, s.bricks).map((b) => b.id));
+        const inside = new Set(
+          carryIds ?? bricksInGroup(g, s.bricks).map((b) => b.id)
+        );
         set((st) => ({
           groups: st.groups.map((gg) =>
             gg.id === id ? { ...gg, board: { ...gg.board, x, y } } : gg
