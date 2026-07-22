@@ -174,6 +174,34 @@ class AudioEngine {
     this.emit(true);
   }
 
+  /**
+   * Turn looping on or off for a sounding brick without restarting it.
+   * Switching it off lets the current pass finish rather than cutting mid-note.
+   */
+  setBrickLoop(brickId: string, loop: boolean) {
+    const voice = this.voices.get(brickId);
+    if (!voice) return;
+    voice.loop = loop;
+    voice.part.loop = loop;
+
+    if (loop) {
+      if (this.endTimer !== null) {
+        clearTimeout(this.endTimer);
+        this.endTimer = null;
+      }
+      return;
+    }
+    // play out the pass we're in, then stop
+    const len = voice.lengthBeats > 0 ? voice.lengthBeats : 4;
+    const pos = ((this.transportBeats() % len) + len) % len;
+    const remaining = (len - pos) * (60 / (this.currentBpm || 120));
+    if (this.endTimer !== null) clearTimeout(this.endTimer);
+    this.endTimer = window.setTimeout(
+      () => this.stop(),
+      (remaining + 0.3) * 1000
+    );
+  }
+
   /** Move the play position (seconds from the start of the material). */
   seek(seconds: number) {
     if (this.voices.size === 0) return;
@@ -600,6 +628,16 @@ class AudioEngine {
     }
 
     if (this.voices.size === 0) return;
+
+    // per-layer loop toggles apply live, like mute/solo/gain
+    for (const layer of mix.layers) {
+      const voice = this.voices.get(layer.brickId);
+      if (voice && voice.loop !== layer.loop) {
+        voice.loop = layer.loop;
+        voice.part.loop = layer.loop;
+      }
+    }
+
     for (const [brickId, level] of levels) {
       const voice = this.voices.get(brickId);
       if (!voice) continue;

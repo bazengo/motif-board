@@ -223,11 +223,19 @@ export function BrickEditor() {
             >
               ▶ Play
             </button>
-            <label className="audition-toggle" title="Loop while editing">
+            <label
+              className="audition-toggle"
+              title="Loop while editing — takes effect immediately, even mid-playback"
+            >
               <input
                 type="checkbox"
                 checked={editorLoop}
-                onChange={(e) => setEditorLoop(e.target.checked)}
+                onChange={(e) => {
+                  setEditorLoop(e.target.checked);
+                  // apply to what's already sounding instead of waiting for
+                  // the next play
+                  engine.setBrickLoop(brick.id, e.target.checked);
+                }}
               />
               ⟲
             </label>
