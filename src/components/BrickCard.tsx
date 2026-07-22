@@ -337,11 +337,9 @@ export function BrickCard({ brick }: { brick: Brick }) {
             <span
               key={t.id}
               className={'brick-mixtag' + (t.kind === 'text' ? ' text-tag' : '')}
-              style={
-                t.kind === 'mix'
-                  ? { background: t.color }
-                  : { borderColor: t.color, color: t.color }
-              }
+              // mix tags keep their colour; text tags are styled dark-on-light
+              // by CSS so they stay legible on every sticky colour
+              style={t.kind === 'mix' ? { background: t.color } : undefined}
             >
               {t.label}
             </span>
