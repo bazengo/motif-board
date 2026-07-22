@@ -29,6 +29,8 @@ export function TimelineStrip() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [dragOut, setDragOut] = useState(false);
+  const [copyMode, setCopyMode] = useState(false);
+  const duplicateSection = useStore((s) => s.duplicateTimelineSection);
   const [playhead, setPlayhead] = useState(0); // seek position when not running
   const [loopAll, setLoopAll] = useState(false);
   const editorOpen = useStore((s) => s.editorOpen);
@@ -185,6 +187,7 @@ export function TimelineStrip() {
       if (!dragging) return;
       // dragging up onto the corkboard removes the section
       setDragOut(overBoard(ev));
+      setCopyMode(ev.ctrlKey || ev.metaKey);
       setDropIndex(indexAt(ev.clientX));
     };
     const up = (ev: PointerEvent) => {
@@ -194,6 +197,11 @@ export function TimelineStrip() {
         if (overBoard(ev)) {
           removeSection(section.id);
           if (selectedId === section.id) setSelectedId(null);
+        } else if (ev.ctrlKey || ev.metaKey) {
+          // ctrl-drag drops a copy and leaves the original where it was
+          const to = indexAt(ev.clientX);
+          const id = duplicateSection(section.id, to > i ? to + 1 : to);
+          if (id) setSelectedId(id);
         } else {
           const to = indexAt(ev.clientX);
           if (to !== i) moveSection(section.id, to);
@@ -202,6 +210,7 @@ export function TimelineStrip() {
       setDragId(null);
       setDropIndex(null);
       setDragOut(false);
+      setCopyMode(false);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -336,7 +345,9 @@ export function TimelineStrip() {
                         (dragId === section.id
                           ? dragOut
                             ? ' drag-remove'
-                            : ' dragging'
+                            : copyMode
+                              ? ' drag-copy'
+                              : ' dragging'
                           : '') +
                         (dragId && dropIndex === i && dragId !== section.id
                           ? ' drop-here'
@@ -348,7 +359,7 @@ export function TimelineStrip() {
                         borderColor: mix.color,
                       }}
                       onPointerDown={(e) => onBlockDown(e, section, i)}
-                      title={`${mix.name} — ${formatDuration(dur)} · drag to reorder`}
+                      title={`${mix.name} — ${formatDuration(dur)} · drag to reorder, ctrl-drag to copy, drag onto the board to remove`}
                     >
                       <div
                         className="tl-block-head"

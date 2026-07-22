@@ -203,6 +203,12 @@ interface AppState {
   copyNotes: (brickId: string, noteIds: string[], cut?: boolean) => void;
   pasteNotes: (brickId: string) => string[];
   quantize: (brickId: string, noteIds: string[] | null, grid: number) => void;
+  /** Ctrl-drag copy support: duplicate in place, returns old id -> new id. */
+  duplicateNotes: (
+    brickId: string,
+    noteIds: string[]
+  ) => Record<string, string>;
+  duplicateTimelineSection: (id: string, atIndex?: number) => string | null;
 }
 
 export const useStore = create<AppState>()(
@@ -588,6 +594,46 @@ export const useStore = create<AppState>()(
           ),
         }));
         return ids;
+      },
+
+      /** Copy notes in place; returns original id -> copy id. */
+      duplicateNotes: (brickId, noteIds) => {
+        const s = useStore.getState();
+        const brick = s.bricks.find((b) => b.id === brickId);
+        if (!brick) return {};
+        const wanted = new Set(noteIds);
+        const map: Record<string, string> = {};
+        const copies: Note[] = [];
+        for (const n of brick.notes) {
+          if (!wanted.has(n.id)) continue;
+          const id = nanoid(8);
+          map[n.id] = id;
+          copies.push({ ...n, id });
+        }
+        if (copies.length === 0) return {};
+        set((st) => ({
+          bricks: st.bricks.map((b) =>
+            b.id === brickId ? { ...b, notes: [...b.notes, ...copies] } : b
+          ),
+        }));
+        return map;
+      },
+
+      duplicateTimelineSection: (id, atIndex) => {
+        const s = useStore.getState();
+        const src = s.timeline.find((t) => t.id === id);
+        if (!src) return null;
+        const copy: TimelineSection = { ...src, id: nanoid(8) };
+        set((st) => {
+          const next = [...st.timeline];
+          const i =
+            atIndex == null
+              ? next.length
+              : Math.max(0, Math.min(next.length, atIndex));
+          next.splice(i, 0, copy);
+          return { timeline: next };
+        });
+        return copy.id;
       },
 
       quantize: (brickId, noteIds, grid) =>

@@ -92,6 +92,7 @@ export function PianoRoll({
   const copyNotes = useStore((s) => s.copyNotes);
   const pasteNotes = useStore((s) => s.pasteNotes);
   const quantize = useStore((s) => s.quantize);
+  const duplicateNotes = useStore((s) => s.duplicateNotes);
   const activeTemplate = templates.find((t) => t.id === activeBrush) ?? null;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -362,15 +363,32 @@ export function PianoRoll({
       group = new Set([id]);
       setSelected(group);
     }
+
+    // Ctrl/⌘-drag leaves the originals behind and drags fresh copies
+    let primaryId = id;
+    let copyOf: Record<string, string> | null = null;
+    if (e.ctrlKey || e.metaKey) {
+      copyOf = duplicateNotes(brick!.id, [...group]);
+      if (Object.keys(copyOf).length) {
+        primaryId = copyOf[id] ?? id;
+        setSelected(new Set(Object.values(copyOf)));
+      } else {
+        copyOf = null;
+      }
+    }
+
+    // copies start life exactly on top of their originals
     const origs = new Map<string, Orig>();
     for (const nid of group) {
       const nn = brick!.notes.find((x) => x.id === nid);
-      if (nn) origs.set(nid, { start: nn.start, pitch: nn.pitch, duration: nn.duration });
+      if (!nn) continue;
+      const key = copyOf?.[nid] ?? nid;
+      origs.set(key, { start: nn.start, pitch: nn.pitch, duration: nn.duration });
     }
     const c = coords(e);
     dragRef.current = {
       type: 'move',
-      primaryId: id,
+      primaryId,
       downBeat: c.beat,
       downRow: c.row,
       origs,

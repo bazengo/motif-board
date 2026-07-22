@@ -351,6 +351,10 @@
 .tl-block.dragging {
   opacity: 0.45;
 }
+/* ctrl-drag: releasing drops a copy and keeps the original */
+.tl-block.drag-copy {
+  box-shadow: inset 0 0 0 2px #95d5b2;
+}
 /* dragged up onto the corkboard: releasing here removes the section */
 .tl-block.drag-remove {
   opacity: 0.3;
