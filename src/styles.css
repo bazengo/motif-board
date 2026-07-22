@@ -282,64 +282,112 @@
   display: flex;
   gap: 6px;
 }
-.timeline-strip {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
+/* horizontal scroller shared by the ruler and the lane so they stay aligned */
+.tl-scroll {
   overflow-x: auto;
-  padding: 0 12px 12px;
-  min-height: 132px;
+  overflow-y: hidden;
+  padding: 0 12px 8px;
+}
+.tl-ruler {
+  position: relative;
+  height: 18px;
+  border-bottom: 1px solid #2c313d;
+  margin-bottom: 6px;
+}
+.tl-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid #333a47;
+}
+.tl-tick span {
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  font-size: 10px;
+  color: #7f8798;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.timeline-strip {
+  position: relative;
+  background: #12151b;
+  border: 1px solid #2c313d;
+  border-radius: 6px;
 }
 .tl-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
   font-size: 12px;
   color: #8a92a3;
-  line-height: 1.6;
-  padding: 16px;
-  border: 1px dashed #3a4150;
-  border-radius: 8px;
-  width: 100%;
   text-align: center;
 }
-.tl-section {
-  flex: 0 0 auto;
-  width: 210px;
-  border: 2px solid #7bdff2;
-  border-radius: 10px;
+/* a section: bracketed in its mix colour, filled with the layered
+   piano-roll preview of whatever plays there */
+.tl-block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   overflow: hidden;
-  background: #12151b;
+  background: #171b22;
+  border: 1px solid;
+  border-left-width: 3px;
+  border-right-width: 3px;
+  border-radius: 5px;
+  cursor: pointer;
 }
-.tl-section.active {
-  box-shadow: 0 0 0 2px #5ef2a0;
+.tl-block.active {
+  box-shadow: inset 0 0 0 1px #5ef2a0;
 }
-.tl-sec-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
+.tl-block.selected {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+.tl-block-head {
+  height: 15px;
   color: #16181d;
   font-weight: 700;
-  font-size: 12px;
-}
-.tl-sec-num {
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 4px;
+  font-size: 10px;
+  line-height: 15px;
   padding: 0 5px;
-}
-.tl-sec-name {
-  flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+.tl-block-name {
   white-space: nowrap;
+}
+.tl-preview {
+  display: block;
+}
+.tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #5ef2a0;
+  pointer-events: none;
+  z-index: 5;
+}
+.tl-detail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px 12px;
+  border-top: 1px solid #2c313d;
+}
+.tl-detail-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6e9ef;
+}
+.tl-detail-stats {
+  font-size: 11px;
+  color: #7f8798;
 }
 .tl-sec-move {
   display: flex;
   gap: 1px;
-}
-.tl-sec-body {
-  padding: 7px 8px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 .tl-field {
   display: flex;

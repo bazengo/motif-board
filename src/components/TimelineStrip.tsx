@@ -4,11 +4,13 @@ import { engine } from '../audio/engine';
 import { exportTimeline } from '../lib/midi';
 import {
   buildTimelinePlan,
-  sectionSeconds,
   sectionBpm,
   mixLengthBeats,
   formatDuration,
 } from '../lib/timeline';
+
+const LANE_H = 58;
+const RULER_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300];
 
 export function TimelineStrip() {
   const timeline = useStore((s) => s.timeline);
@@ -22,10 +24,11 @@ export function TimelineStrip() {
   const [collapsed, setCollapsed] = useState(false);
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [pxPerSec, setPxPerSec] = useState(36);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => engine.onChange(setPlaying), []);
 
-  // playhead position along the arrangement
   useEffect(() => {
     if (!playing) {
       setElapsed(null);
@@ -41,13 +44,30 @@ export function TimelineStrip() {
   }, [playing]);
 
   const plan = buildTimelinePlan(timeline, mixes, bricks, globalBpm);
+  const totalWidth = Math.max(320, plan.totalSeconds * pxPerSec);
 
-  function playTimeline() {
-    if (plan.notes.length === 0) return;
-    engine.playPlan(plan.notes, plan.totalSeconds);
+  // one shared pitch range keeps every section's preview on the same scale,
+  // so a bass part visibly sits below a lead
+  let minPitch = Infinity;
+  let maxPitch = -Infinity;
+  for (const n of plan.notes) {
+    minPitch = Math.min(minPitch, n.pitch);
+    maxPitch = Math.max(maxPitch, n.pitch);
   }
+  if (!Number.isFinite(minPitch)) {
+    minPitch = 48;
+    maxPitch = 72;
+  }
+  const span = Math.max(6, maxPitch - minPitch + 2);
 
-  // which section the playhead is inside
+  // ruler step that keeps labels ~60px apart
+  const step =
+    RULER_STEPS.find((s) => s * pxPerSec >= 60) ??
+    RULER_STEPS[RULER_STEPS.length - 1];
+  const ticks: number[] = [];
+  for (let t = 0; t <= plan.totalSeconds + step; t += step) ticks.push(t);
+
+  const selected = timeline.find((t) => t.id === selectedId) ?? timeline[0];
   const activeIndex =
     elapsed == null
       ? -1
@@ -55,6 +75,10 @@ export function TimelineStrip() {
           const end = plan.starts[i + 1] ?? plan.totalSeconds;
           return elapsed >= start && elapsed < end;
         });
+
+  function playTimeline() {
+    if (plan.notes.length) engine.playPlan(plan.notes, plan.totalSeconds);
+  }
 
   return (
     <div className={'timeline-wrap' + (collapsed ? ' collapsed' : '')}>
@@ -73,6 +97,22 @@ export function TimelineStrip() {
           {elapsed != null && <> · {formatDuration(elapsed)}</>}
         </span>
         <div className="tl-actions">
+          <div className="btn-group">
+            <button
+              className="ghost-btn"
+              onClick={() => setPxPerSec((z) => Math.max(6, z / 1.4))}
+              title="Zoom out"
+            >
+              −
+            </button>
+            <button
+              className="ghost-btn"
+              onClick={() => setPxPerSec((z) => Math.min(200, z * 1.4))}
+              title="Zoom in"
+            >
+              +
+            </button>
+          </div>
           <button
             className="primary-btn"
             onClick={playTimeline}
@@ -95,152 +135,257 @@ export function TimelineStrip() {
       </div>
 
       {!collapsed && (
-        <div className="timeline-strip">
-          {timeline.length === 0 && (
-            <div className="tl-empty">
-              Drag the <strong>⇩</strong> handle on a mix node down here to
-              arrange it. Sections play left to right.
-            </div>
-          )}
-
-          {timeline.map((section, i) => {
-            const mix = mixes.find((m) => m.id === section.mixId);
-            if (!mix) return null;
-            const bpm = sectionBpm(section, globalBpm);
-            const secs = sectionSeconds(section, mix, bricks, globalBpm);
-            const bars =
-              (mixLengthBeats(mix, bricks) * section.repeats) /
-              ((section.timeSig.num * 4) / section.timeSig.den || 4);
-            return (
-              <div
-                key={section.id}
-                data-section-index={i}
-                className={'tl-section' + (activeIndex === i ? ' active' : '')}
-                style={{ borderColor: mix.color }}
-              >
-                <div className="tl-sec-head" style={{ background: mix.color }}>
-                  <span className="tl-sec-num">{i + 1}</span>
-                  <span className="tl-sec-name" title={mix.name}>
-                    {mix.name}
-                  </span>
-                  <span className="tl-sec-move">
-                    <button
-                      className="icon-btn"
-                      disabled={i === 0}
-                      onClick={() => moveSection(section.id, i - 1)}
-                      title="Move left"
-                    >
-                      ‹
-                    </button>
-                    <button
-                      className="icon-btn"
-                      disabled={i === timeline.length - 1}
-                      onClick={() => moveSection(section.id, i + 1)}
-                      title="Move right"
-                    >
-                      ›
-                    </button>
-                    <button
-                      className="icon-btn"
-                      onClick={() => removeSection(section.id)}
-                      title="Remove from timeline"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                </div>
-
-                <div className="tl-sec-body">
-                  <label className="tl-field">
-                    Repeats
-                    <input
-                      type="number"
-                      min={1}
-                      max={64}
-                      value={section.repeats}
-                      onChange={(e) =>
-                        updateSection(section.id, {
-                          repeats: Math.max(1, Number(e.target.value) || 1),
-                        })
-                      }
-                    />
-                  </label>
-
-                  <label className="tl-check">
-                    <input
-                      type="checkbox"
-                      checked={section.lockBpm}
-                      onChange={(e) =>
-                        updateSection(section.id, { lockBpm: e.target.checked })
-                      }
-                    />
-                    Lock to master
-                  </label>
-
-                  <label className="tl-field">
-                    BPM
-                    <input
-                      type="number"
-                      min={20}
-                      max={300}
-                      value={bpm}
-                      disabled={section.lockBpm}
-                      onChange={(e) =>
-                        updateSection(section.id, {
-                          bpm: Math.max(20, Math.min(300, Number(e.target.value) || 120)),
-                        })
-                      }
-                    />
-                  </label>
-
-                  <label className="tl-field">
-                    Time sig
-                    <span className="tl-timesig">
-                      <input
-                        type="number"
-                        min={1}
-                        max={32}
-                        value={section.timeSig.num}
-                        onChange={(e) =>
-                          updateSection(section.id, {
-                            timeSig: {
-                              ...section.timeSig,
-                              num: Math.max(1, Number(e.target.value) || 4),
-                            },
-                          })
-                        }
-                      />
-                      <span>/</span>
-                      <select
-                        value={section.timeSig.den}
-                        onChange={(e) =>
-                          updateSection(section.id, {
-                            timeSig: {
-                              ...section.timeSig,
-                              den: Number(e.target.value),
-                            },
-                          })
-                        }
-                      >
-                        {[2, 4, 8, 16].map((d) => (
-                          <option key={d} value={d}>
-                            {d}
-                          </option>
-                        ))}
-                      </select>
-                    </span>
-                  </label>
-
-                  <div className="tl-sec-stats">
-                    {bars % 1 === 0 ? bars : bars.toFixed(1)} bars ·{' '}
-                    {formatDuration(secs)}
+        <>
+          <div className="tl-scroll">
+            <div style={{ width: totalWidth, position: 'relative' }}>
+              {/* time codes */}
+              <div className="tl-ruler">
+                {ticks.map((t) => (
+                  <div key={t} className="tl-tick" style={{ left: t * pxPerSec }}>
+                    <span>{formatDuration(t)}</span>
                   </div>
-                </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+
+              {/* the lane — keeps .timeline-strip so mix nodes can be dropped here */}
+              <div className="timeline-strip" style={{ height: LANE_H }}>
+                {timeline.length === 0 && (
+                  <div className="tl-empty">
+                    Drag the <strong>⇩</strong> handle on a mix node down here to
+                    arrange it.
+                  </div>
+                )}
+
+                {timeline.map((section, i) => {
+                  const mix = mixes.find((m) => m.id === section.mixId);
+                  if (!mix) return null;
+                  const start = plan.starts[i] ?? 0;
+                  const end = plan.starts[i + 1] ?? plan.totalSeconds;
+                  const dur = Math.max(0.001, end - start);
+                  const w = Math.max(6, dur * pxPerSec);
+                  const notes = plan.notes.filter(
+                    (n) => n.time >= start && n.time < end
+                  );
+                  return (
+                    <div
+                      key={section.id}
+                      data-section-index={i}
+                      className={
+                        'tl-block' +
+                        (activeIndex === i ? ' active' : '') +
+                        (selected?.id === section.id ? ' selected' : '')
+                      }
+                      style={{
+                        left: start * pxPerSec,
+                        width: w,
+                        borderColor: mix.color,
+                      }}
+                      onClick={() => setSelectedId(section.id)}
+                      title={`${mix.name} — ${formatDuration(dur)}`}
+                    >
+                      <div
+                        className="tl-block-head"
+                        style={{ background: mix.color }}
+                      >
+                        <span className="tl-block-name">
+                          {i + 1}. {mix.name}
+                          {section.repeats > 1 ? ` ×${section.repeats}` : ''}
+                        </span>
+                      </div>
+                      {/* piano-roll preview of what actually plays here */}
+                      <svg
+                        className="tl-preview"
+                        width={w}
+                        height={LANE_H - 16}
+                        preserveAspectRatio="none"
+                      >
+                        {notes.map((n, k) => {
+                          const x = ((n.time - start) / dur) * w;
+                          const nw = Math.max(1.5, (n.dur / dur) * w);
+                          const y =
+                            (LANE_H - 16) -
+                            ((n.pitch - minPitch + 1) / span) * (LANE_H - 16);
+                          return (
+                            <rect
+                              key={k}
+                              x={x}
+                              y={y}
+                              width={nw}
+                              height={Math.max(1.5, (LANE_H - 16) / span - 0.5)}
+                              fill={n.brick.color}
+                              opacity={0.9}
+                            />
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  );
+                })}
+
+                {elapsed != null && (
+                  <div
+                    className="tl-playhead"
+                    style={{ left: elapsed * pxPerSec }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {selected && (
+            <SectionDetail
+              key={selected.id}
+              section={selected}
+              index={timeline.findIndex((t) => t.id === selected.id)}
+              count={timeline.length}
+              mixName={mixes.find((m) => m.id === selected.mixId)?.name ?? '—'}
+              bars={
+                (mixLengthBeats(
+                  mixes.find((m) => m.id === selected.mixId)!,
+                  bricks
+                ) *
+                  selected.repeats) /
+                ((selected.timeSig.num * 4) / selected.timeSig.den || 4)
+              }
+              bpm={sectionBpm(selected, globalBpm)}
+              onMove={(to) => moveSection(selected.id, to)}
+              onRemove={() => removeSection(selected.id)}
+              onUpdate={(patch) => updateSection(selected.id, patch)}
+            />
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+function SectionDetail({
+  section,
+  index,
+  count,
+  mixName,
+  bars,
+  bpm,
+  onMove,
+  onRemove,
+  onUpdate,
+}: {
+  section: import('../types').TimelineSection;
+  index: number;
+  count: number;
+  mixName: string;
+  bars: number;
+  bpm: number;
+  onMove: (to: number) => void;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<import('../types').TimelineSection>) => void;
+}) {
+  return (
+    <div className="tl-detail">
+      <span className="tl-detail-title">
+        {index + 1}. {mixName}
+      </span>
+
+      <label className="tl-field">
+        Repeats
+        <input
+          type="number"
+          min={1}
+          max={64}
+          value={section.repeats}
+          onChange={(e) =>
+            onUpdate({ repeats: Math.max(1, Number(e.target.value) || 1) })
+          }
+        />
+      </label>
+
+      <label className="tl-check">
+        <input
+          type="checkbox"
+          checked={section.lockBpm}
+          onChange={(e) => onUpdate({ lockBpm: e.target.checked })}
+        />
+        Lock to master
+      </label>
+
+      <label className="tl-field">
+        BPM
+        <input
+          type="number"
+          min={20}
+          max={300}
+          value={bpm}
+          disabled={section.lockBpm}
+          onChange={(e) =>
+            onUpdate({
+              bpm: Math.max(20, Math.min(300, Number(e.target.value) || 120)),
+            })
+          }
+        />
+      </label>
+
+      <label className="tl-field">
+        Time sig
+        <span className="tl-timesig">
+          <input
+            type="number"
+            min={1}
+            max={32}
+            value={section.timeSig.num}
+            onChange={(e) =>
+              onUpdate({
+                timeSig: {
+                  ...section.timeSig,
+                  num: Math.max(1, Number(e.target.value) || 4),
+                },
+              })
+            }
+          />
+          <span>/</span>
+          <select
+            value={section.timeSig.den}
+            onChange={(e) =>
+              onUpdate({
+                timeSig: { ...section.timeSig, den: Number(e.target.value) },
+              })
+            }
+          >
+            {[2, 4, 8, 16].map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </span>
+      </label>
+
+      <span className="tl-detail-stats">
+        {bars % 1 === 0 ? bars : bars.toFixed(1)} bars
+      </span>
+
+      <span className="brush-spacer" />
+
+      <div className="tl-sec-move">
+        <button
+          className="icon-btn"
+          disabled={index === 0}
+          onClick={() => onMove(index - 1)}
+          title="Move earlier"
+        >
+          ‹
+        </button>
+        <button
+          className="icon-btn"
+          disabled={index === count - 1}
+          onClick={() => onMove(index + 1)}
+          title="Move later"
+        >
+          ›
+        </button>
+        <button className="icon-btn" onClick={onRemove} title="Remove section">
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
