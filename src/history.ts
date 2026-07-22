@@ -1,5 +1,5 @@
 import { useStore } from './store';
-import type { Brick, Mix } from './types';
+import type { Brick, Mix, TimelineSection, PhraseTemplate } from './types';
 
 // Lightweight, non-invasive undo/redo. We subscribe to the store and snapshot
 // the tracked slice (bricks + mixes + globalBpm) on a debounce, so a burst of
@@ -7,6 +7,8 @@ import type { Brick, Mix } from './types';
 interface Snap {
   bricks: Brick[];
   mixes: Mix[];
+  timeline: TimelineSection[];
+  templates: PhraseTemplate[];
   globalBpm: number;
 }
 
@@ -20,12 +22,24 @@ const listeners = new Set<() => void>();
 
 function snap(): Snap {
   const s = useStore.getState();
-  return { bricks: s.bricks, mixes: s.mixes, globalBpm: s.globalBpm };
+  return {
+    bricks: s.bricks,
+    mixes: s.mixes,
+    timeline: s.timeline,
+    templates: s.templates,
+    globalBpm: s.globalBpm,
+  };
 }
 // Reference equality is enough — our store uses immutable updates, so an
 // unchanged slice keeps the same array/value reference.
 function same(a: Snap, b: Snap): boolean {
-  return a.bricks === b.bricks && a.mixes === b.mixes && a.globalBpm === b.globalBpm;
+  return (
+    a.bricks === b.bricks &&
+    a.mixes === b.mixes &&
+    a.timeline === b.timeline &&
+    a.templates === b.templates &&
+    a.globalBpm === b.globalBpm
+  );
 }
 function emit() {
   listeners.forEach((l) => l());
@@ -46,7 +60,13 @@ function commit() {
 
 function apply(s: Snap) {
   traveling = true;
-  useStore.setState({ bricks: s.bricks, mixes: s.mixes, globalBpm: s.globalBpm });
+  useStore.setState({
+    bricks: s.bricks,
+    mixes: s.mixes,
+    timeline: s.timeline,
+    templates: s.templates,
+    globalBpm: s.globalBpm,
+  });
   traveling = false;
   last = s;
 }

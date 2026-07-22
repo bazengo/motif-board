@@ -166,11 +166,18 @@ export function MixPanel() {
         ))}
       </div>
 
-      <label className="side-label">Mix notes</label>
+      <label className="side-label">
+        Mix notes &amp; #tags
+        <InfoTip label="Mix notes and tags">
+          Any <strong>#word</strong> here becomes a <strong>tag</strong> shown in
+          the tag bar above the board. The mix itself is also a tag, carried by
+          every brick in it.
+        </InfoTip>
+      </label>
       <textarea
         className="mix-notes"
         rows={3}
-        placeholder="Arrangement ideas, intent, what this mix is for…"
+        placeholder="Arrangement ideas, intent… add #tags to group"
         value={mix.notes}
         onChange={(e) => updateMix(mix.id, { notes: e.target.value })}
       />

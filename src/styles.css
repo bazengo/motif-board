@@ -115,6 +115,10 @@
   display: flex;
   min-height: 0;
 }
+.board.panning {
+  cursor: grabbing;
+  user-select: none;
+}
 .board {
   position: relative;
   flex: 1;

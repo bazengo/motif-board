@@ -278,10 +278,20 @@ export function BrickEditor() {
                   value={brick.lyrics}
                   onChange={(e) => updateBrick(brick.id, { lyrics: e.target.value })}
                 />
-                <label className="side-label">Process notes</label>
+                <label className="side-label">
+                  Process notes &amp; #tags
+                  <InfoTip label="Notes and tags help">
+                    Anything you write here is yours — where the idea came from,
+                    how to develop it. Any <strong>#word</strong> also becomes a{' '}
+                    <strong>tag</strong>: it appears as a pill on the card and in
+                    the tag bar above the board, where clicking it highlights
+                    every brick that shares it. Tags are stripped from the text
+                    shown on the card.
+                  </InfoTip>
+                </label>
                 <textarea
                   rows={5}
-                  placeholder="Where this came from, how to develop it…"
+                  placeholder="Where this came from, how to develop it… add #tags to group ideas"
                   value={brick.processNotes}
                   onChange={(e) =>
                     updateBrick(brick.id, { processNotes: e.target.value })

@@ -53,6 +53,32 @@ export function Board() {
 
   const empty = bricks.length === 0 && mixes.length === 0;
 
+  /** Middle-drag anywhere on the board (including over cards) to pan. */
+  function onBoardPointerDown(e: React.PointerEvent) {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLDivElement;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startLeft = el.scrollLeft;
+    const startTop = el.scrollTop;
+    el.classList.add('panning');
+
+    const move = (ev: PointerEvent) => {
+      el.scrollLeft = startLeft - (ev.clientX - startX);
+      el.scrollTop = startTop - (ev.clientY - startY);
+    };
+    const up = () => {
+      el.classList.remove('panning');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
   function onBoardDoubleClick(e: React.MouseEvent) {
     if (e.target !== e.currentTarget) return; // only empty board space
     const el = e.currentTarget as HTMLDivElement;
@@ -63,7 +89,18 @@ export function Board() {
   }
 
   return (
-    <div className="board" onDoubleClick={onBoardDoubleClick}>
+    <div
+      className="board"
+      onDoubleClick={onBoardDoubleClick}
+      onPointerDown={onBoardPointerDown}
+      // suppress Windows' middle-click autoscroll and Linux middle-click paste
+      onMouseDown={(e) => {
+        if (e.button === 1) e.preventDefault();
+      }}
+      onAuxClick={(e) => {
+        if (e.button === 1) e.preventDefault();
+      }}
+    >
       {empty && (
         <div className="board-empty">
           <h2>Your corkboard is empty</h2>
