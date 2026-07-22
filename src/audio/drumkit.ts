@@ -142,6 +142,12 @@ export class DrumKit {
     return v;
   }
 
+  /** Build the voices for these pitches now, so the first hit isn't spent
+   *  constructing Tone nodes inside the scheduler callback. */
+  prime(pitches: Iterable<number>) {
+    for (const p of pitches) this.voiceFor(p);
+  }
+
   /** `note` may be a name ("C1") or a raw MIDI number. */
   triggerAttackRelease(
     note: string | number,

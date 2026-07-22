@@ -48,6 +48,7 @@ type Drag =
       downRow: number;
       origs: Map<string, Orig>;
       lastPreview: number;
+      moved: boolean;
     }
   | {
       type: 'bg';
@@ -219,6 +220,7 @@ export function PianoRoll({
           pitch: pitchOfRow(rowOfPitch(o.pitch) + deltaRow),
         };
       }
+      if (deltaBeat !== 0 || deltaRow !== 0) d.moved = true;
       updateNotesBatch(brick.id, patches);
 
       const newPrimaryPitch = pitchOfRow(rowOfPitch(primary.pitch) + deltaRow);
@@ -231,6 +233,14 @@ export function PianoRoll({
     function onUp() {
       const d = dragRef.current;
       dragRef.current = null;
+
+      // audible confirmation when a drag lands (covers horizontal moves, which
+      // never change pitch and so never trigger the in-flight preview)
+      if (d && d.type === 'move' && d.moved && audition && brick) {
+        const n = brick.notes.find((x) => x.id === d.primaryId);
+        if (n) engine.preview(n.pitch, brick.instrument, 0.8, brick.percussion);
+      }
+
       if (d && d.type === 'bg' && brick) {
         if (d.moved && marqueeRef.current) {
           const m = normRect(marqueeRef.current);
@@ -326,6 +336,7 @@ export function PianoRoll({
         downRow: 0,
         origs: new Map([[id, { start: n.start, pitch: n.pitch, duration: n.duration }]]),
         lastPreview: n.pitch,
+        moved: false,
       };
       return;
     }
@@ -360,6 +371,7 @@ export function PianoRoll({
       downRow: c.row,
       origs,
       lastPreview: n.pitch,
+      moved: false,
     };
   }
 

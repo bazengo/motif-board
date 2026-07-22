@@ -23,6 +23,14 @@ function beatsToBBS(beats: number): string {
 
 type Voiceable = Tone.PolySynth | Tone.Sampler | DrumKit;
 
+/**
+ * Every part starts this far into the transport. Combined with starting the
+ * transport slightly ahead, it guarantees no event sits at exactly position 0,
+ * where Tone's scheduler can miss it — that was dropping the first note of a
+ * one-shot brick (looping mixes only hid it, since the note returned next pass).
+ */
+const PART_LEAD = 0.05; // seconds
+
 /** Percussion bricks always use the drum kit, whatever instrument is set. */
 function makeVoiceFor(brick: Brick): Voiceable {
   return brick.percussion ? new DrumKit() : makeSynth(brick.instrument);
@@ -132,9 +140,11 @@ class AudioEngine {
     return this.voices.size > 0;
   }
 
-  /** Current transport position in beats (quarter notes) — for the playhead. */
+  /** Current transport position in beats (quarter notes) — for the playhead.
+   *  Discounts the part lead-in so the cursor lines up with the notes. */
   transportBeats(): number {
-    return Tone.getTransport().seconds * (this.currentBpm / 60);
+    const s = Math.max(0, Tone.getTransport().seconds - PART_LEAD);
+    return s * (this.currentBpm / 60);
   }
 
   isBrickPlaying(brickId: string): boolean {
@@ -143,7 +153,7 @@ class AudioEngine {
 
   /** Elapsed transport time in seconds — for the timeline playhead. */
   transportSeconds(): number {
-    return Math.max(0, Tone.getTransport().seconds);
+    return Math.max(0, Tone.getTransport().seconds - PART_LEAD);
   }
 
   private async ensureStarted() {
@@ -218,11 +228,15 @@ class AudioEngine {
         sig: brickSignature(brick),
       };
 
+      // build drum voices up front — creating them inside the first trigger
+      // callback can swallow that hit
+      if (synth instanceof DrumKit) synth.prime(brick.notes.map((n) => n.pitch));
+
       const part = this.makePart(voice, buildEvents(brick, secPerBeat));
       part.loop = loop;
       part.loopStart = 0;
       part.loopEnd = beatsToBBS(brick.lengthBeats);
-      part.start(0);
+      part.start(PART_LEAD);
       voice.part = part;
 
       this.voices.set(brick.id, voice);
@@ -242,7 +256,8 @@ class AudioEngine {
     this.emit(true);
 
     if (!anyLoop) {
-      const ms = (maxEndBeats * secPerBeat + START_DELAY + 0.3) * 1000;
+      const ms =
+        (maxEndBeats * secPerBeat + PART_LEAD + START_DELAY + 0.3) * 1000;
       this.endTimer = window.setTimeout(() => this.stop(), ms);
     }
   }
@@ -312,8 +327,10 @@ class AudioEngine {
           pitch: n.pitch,
         }))
       );
+      if (synth instanceof DrumKit) synth.prime(list.map((n) => n.pitch));
+
       part.loop = false;
-      part.start(0);
+      part.start(PART_LEAD);
       voice.part = part;
 
       this.voices.set(brickId, voice);
@@ -325,7 +342,7 @@ class AudioEngine {
     this.emit(true);
     this.endTimer = window.setTimeout(
       () => this.stop(),
-      (totalSeconds + 0.6) * 1000
+      (totalSeconds + PART_LEAD + 0.6) * 1000
     );
   }
 
@@ -356,7 +373,7 @@ class AudioEngine {
         part.loop = voice.loop;
         part.loopStart = 0;
         part.loopEnd = beatsToBBS(brick.lengthBeats);
-        part.start(0);
+        part.start(PART_LEAD);
         voice.part = part;
         voice.lengthBeats = brick.lengthBeats;
       } else {
