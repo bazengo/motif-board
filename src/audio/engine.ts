@@ -212,6 +212,18 @@ class AudioEngine {
     return this.currentBpm;
   }
 
+  /**
+   * Overall output level, 0..1. Rides on the destination so it applies to
+   * everything — bricks, mixes and arrangements — and takes effect live.
+   */
+  setMasterVolume(v: number) {
+    const dest = Tone.getDestination();
+    const db = gainToDb(Math.max(0, Math.min(1, v)));
+    if (Math.abs(dest.volume.value - db) > 0.01) {
+      dest.volume.rampTo(db, 0.05);
+    }
+  }
+
   /** Wait for sampled instruments to finish loading, so their first notes
    *  aren't silently dropped. Bounded, so a failed load can't hang playback. */
   private async waitForSamples() {

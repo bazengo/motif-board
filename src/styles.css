@@ -563,6 +563,21 @@
   display: flex;
   gap: 2px;
 }
+.master-vol {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #12151b;
+  border: 1px solid #333a47;
+  border-radius: 7px;
+  padding: 5px 9px;
+}
+.master-vol input[type='range'] {
+  width: 84px;
+}
+.master-icon {
+  font-size: 12px;
+}
 .mini-btn.danger {
   color: #b32b2b;
 }

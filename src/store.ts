@@ -141,6 +141,8 @@ interface AppState {
   editorLoop: boolean;
   /** Length in beats given to newly placed notes. */
   noteLength: number;
+  /** Overall output level, 0..1. */
+  masterVolume: number;
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -221,6 +223,7 @@ interface AppState {
   setZoom: (v: number) => void;
   setEditorLoop: (v: boolean) => void;
   setNoteLength: (v: number) => void;
+  setMasterVolume: (v: number) => void;
   copyNotes: (brickId: string, noteIds: string[], cut?: boolean) => void;
   pasteNotes: (brickId: string) => string[];
   quantize: (brickId: string, noteIds: string[] | null, grid: number) => void;
@@ -254,6 +257,7 @@ export const useStore = create<AppState>()(
       zoom: 1,
       editorLoop: true,
       noteLength: 1,
+      masterVolume: 0.9,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -644,6 +648,8 @@ export const useStore = create<AppState>()(
       setZoom: (v) => set({ zoom: Math.max(0.2, Math.min(2, v)) }),
       setEditorLoop: (v) => set({ editorLoop: v }),
       setNoteLength: (v) => set({ noteLength: Math.max(0.0625, v) }),
+      setMasterVolume: (v) =>
+        set({ masterVolume: Math.max(0, Math.min(1, v)) }),
 
       copyNotes: (brickId, noteIds, cut = false) => {
         const s = useStore.getState();
@@ -816,6 +822,7 @@ export const useStore = create<AppState>()(
         grid: s.grid,
         editorLoop: s.editorLoop,
         noteLength: s.noteLength,
+        masterVolume: s.masterVolume,
         timeline: s.timeline,
         groups: s.groups,
       }),

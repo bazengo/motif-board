@@ -27,6 +27,11 @@ function App() {
   const addMix = useStore((s) => s.addMix);
   const addGroup = useStore((s) => s.addGroup);
   const openEditor = useStore((s) => s.openEditor);
+  const masterVolume = useStore((s) => s.masterVolume);
+  const setMasterVolume = useStore((s) => s.setMasterVolume);
+
+  // push the master level to the output whenever it changes (and on load)
+  useEffect(() => engine.setMasterVolume(masterVolume), [masterVolume]);
 
   const [playing, setPlaying] = useState(false);
   const [, forceHistory] = useState(0);
@@ -133,6 +138,20 @@ function App() {
               max={300}
               value={globalBpm}
               onChange={(e) => setGlobalBpm(clampBpm(Number(e.target.value)))}
+            />
+          </label>
+
+          <label className="master-vol" title="Master output level">
+            <span className="master-icon">
+              {masterVolume < 0.01 ? '🔇' : '🔊'}
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={masterVolume}
+              onChange={(e) => setMasterVolume(Number(e.target.value))}
             />
           </label>
 
