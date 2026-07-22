@@ -87,6 +87,7 @@ export function PianoRoll({
   const setShowNoteNames = useStore((s) => s.setShowNoteNames);
   const grid = useStore((s) => s.grid);
   const setGrid = useStore((s) => s.setGrid);
+  const editorLoop = useStore((s) => s.editorLoop);
   const clipboardSize = useStore((s) => s.clipboard.length);
   const copyNotes = useStore((s) => s.copyNotes);
   const pasteNotes = useStore((s) => s.pasteNotes);
@@ -341,6 +342,9 @@ export function PianoRoll({
       return;
     }
 
+    // clicking a note replays it, not just dragging it
+    if (audition) engine.preview(n.pitch, brick!.instrument, 0.8, brick!.percussion);
+
     if (e.shiftKey) {
       setSelected((prev) => {
         const next = new Set(prev);
@@ -503,6 +507,25 @@ export function PianoRoll({
         title="Snap every note in this brick to the grid"
       >
         ⌗ Whole card
+      </button>
+
+      <button
+        className="ghost-btn brush-btn"
+        disabled={selected.size === 0}
+        title="Start playback from the first selected note"
+        onClick={() => {
+          const sel = brick.notes.filter((n) => selected.has(n.id));
+          if (!sel.length) return;
+          const from = Math.min(...sel.map((n) => n.start));
+          engine.play(
+            [{ brick, loop: editorLoop, gain: 0.9 }],
+            brick.bpm,
+            undefined,
+            from
+          );
+        }}
+      >
+        ▶ From selection
       </button>
 
       <span className="brush-spacer" />

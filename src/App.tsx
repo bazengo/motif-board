@@ -42,7 +42,7 @@ function App() {
     () =>
       useStore.subscribe((state) => {
         engine.syncLive(state.bricks);
-        engine.syncMixLevels(state.mixes);
+        engine.syncMixLevels(state.mixes, state.bricks);
       }),
     []
   );

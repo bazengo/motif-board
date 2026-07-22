@@ -21,6 +21,8 @@ export function BrickEditor() {
   const updateBrick = useStore((s) => s.updateBrick);
   const addNote = useStore((s) => s.addNote);
   const setNotes = useStore((s) => s.setNotes);
+  const editorLoop = useStore((s) => s.editorLoop);
+  const setEditorLoop = useStore((s) => s.setEditorLoop);
   const closeEditor = useStore((s) => s.closeEditor);
 
   const [tab, setTab] = useState<'details' | 'theory'>('details');
@@ -203,9 +205,25 @@ export function BrickEditor() {
           </label>
 
           <div className="editor-head-actions">
-            <button className="primary-btn" onClick={() => engine.playBrick(brick)}>
+            <button
+              className="primary-btn"
+              onClick={() =>
+                engine.play(
+                  [{ brick, loop: editorLoop, gain: 0.9 }],
+                  brick.bpm
+                )
+              }
+            >
               ▶ Play
             </button>
+            <label className="audition-toggle" title="Loop while editing">
+              <input
+                type="checkbox"
+                checked={editorLoop}
+                onChange={(e) => setEditorLoop(e.target.checked)}
+              />
+              ⟲
+            </label>
             <button className="ghost-btn" onClick={() => engine.stop()}>
               ■
             </button>

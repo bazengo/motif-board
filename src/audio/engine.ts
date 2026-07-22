@@ -198,6 +198,55 @@ class AudioEngine {
     out.send([0x80 | voice.channel, pitch, 0], performance.now() + durSec * 1000);
   }
 
+  private disposeVoice(voice: Voice) {
+    voice.part?.dispose();
+    voice.synth?.dispose();
+    voice.volume?.dispose();
+    const out = getSelectedOutput();
+    if (out) out.send([0xb0 | voice.channel, 123, 0]); // all notes off
+  }
+
+  /** Build a voice for a brick and schedule it. `startAt` is a transport time. */
+  private createVoice(
+    brick: Brick,
+    loop: boolean,
+    gain: number,
+    channel: number,
+    secPerBeat: number,
+    startAt: number
+  ): Voice {
+    const midiActive = !!getSelectedOutput();
+    const internalOn = this.monitorInternal || !midiActive;
+    let volume: Tone.Volume | null = null;
+    let synth: Voiceable | null = null;
+    if (internalOn) {
+      volume = new Tone.Volume(gainToDb(gain)).toDestination();
+      synth = makeVoiceFor(brick).connect(volume);
+      if (synth instanceof DrumKit) synth.prime(brick.notes.map((n) => n.pitch));
+    }
+
+    const voice: Voice = {
+      brickId: brick.id,
+      synth,
+      volume,
+      part: null as unknown as Tone.Part<NoteEvent>,
+      channel,
+      instrument: brick.instrument,
+      loop,
+      lengthBeats: brick.lengthBeats,
+      level: gain,
+      sig: brickSignature(brick),
+    };
+
+    const part = this.makePart(voice, buildEvents(brick, secPerBeat));
+    part.loop = loop;
+    part.loopStart = 0;
+    part.loopEnd = beatsToBBS(brick.lengthBeats);
+    part.start(startAt);
+    voice.part = part;
+    return voice;
+  }
+
   private makePart(voice: Voice, events: NoteEvent[]): Tone.Part<NoteEvent> {
     return new Tone.Part<NoteEvent>((time, ev) => {
       if (voice.synth) voice.synth.triggerAttackRelease(ev.note, ev.dur, time, ev.vel);
@@ -207,7 +256,12 @@ class AudioEngine {
 
   /** Play a set of bricks together at `bpm`. Pass `mixId` so later gain /
    *  mute / solo changes to that mix can be applied live. */
-  async play(items: PlayItem[], bpm: number, mixId?: string) {
+  async play(
+    items: PlayItem[],
+    bpm: number,
+    mixId?: string,
+    startBeat = 0
+  ) {
     await this.ensureStarted();
     this.stop();
     if (items.length === 0) return;
@@ -281,13 +335,16 @@ class AudioEngine {
     await this.waitForSamples();
     if (token !== this.playToken) return; // superseded while waiting
 
+    // starting from a selection just means beginning at a later transport
+    // position; parts before it are simply skipped
+    const offset = PART_LEAD + Math.max(0, startBeat) * secPerBeat;
     transport.position = 0;
-    transport.start(`+${START_DELAY}`);
+    transport.start(`+${START_DELAY}`, offset);
     this.emit(true);
 
     if (!anyLoop) {
-      const ms =
-        (maxEndBeats * secPerBeat + PART_LEAD + START_DELAY + 0.3) * 1000;
+      const remaining = Math.max(0, maxEndBeats - Math.max(0, startBeat));
+      const ms = (remaining * secPerBeat + PART_LEAD + START_DELAY + 0.3) * 1000;
       this.endTimer = window.setTimeout(() => this.stop(), ms);
     }
   }
@@ -423,11 +480,49 @@ class AudioEngine {
    * Live mixing: push the playing mix's gain / mute / solo straight onto the
    * running voices, so faders move the sound without restarting playback.
    */
-  syncMixLevels(mixes: Mix[]) {
-    if (this.voices.size === 0 || !this.activeMixId) return;
+  syncMixLevels(mixes: Mix[], bricks: Brick[] = []) {
+    if (!this.activeMixId) return;
     const mix = mixes.find((m) => m.id === this.activeMixId);
     if (!mix) return;
     const levels = layerLevels(mix);
+
+    // --- membership: bricks ticked in/out of the mix during playback ---
+    const wanted = new Set(mix.layers.map((l) => l.brickId));
+    for (const [brickId, voice] of [...this.voices]) {
+      if (!wanted.has(brickId)) {
+        this.disposeVoice(voice);
+        this.voices.delete(brickId);
+      }
+    }
+    if (Tone.getTransport().state === 'started') {
+      const secPerBeat = 60 / this.currentBpm;
+      for (const layer of mix.layers) {
+        if (this.voices.has(layer.brickId)) continue;
+        const brick = bricks.find((b) => b.id === layer.brickId);
+        if (!brick) continue;
+        // Join on the next loop boundary so the new layer lands in time
+        // instead of starting mid-phrase.
+        const loopSec = Math.max(0.05, brick.lengthBeats * secPerBeat);
+        const elapsed = Math.max(0, Tone.getTransport().seconds - PART_LEAD);
+        const k = Math.ceil((elapsed + 0.05) / loopSec);
+        const startAt = PART_LEAD + k * loopSec;
+        const channel = brick.percussion ? DRUM_CHANNEL : this.voices.size % 16;
+        this.usedChannels.add(channel);
+        this.voices.set(
+          brick.id,
+          this.createVoice(
+            brick,
+            layer.loop,
+            levels.get(layer.brickId) ?? 0,
+            channel,
+            secPerBeat,
+            startAt
+          )
+        );
+      }
+    }
+
+    if (this.voices.size === 0) return;
     for (const [brickId, level] of levels) {
       const voice = this.voices.get(brickId);
       if (!voice) continue;
