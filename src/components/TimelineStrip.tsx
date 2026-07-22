@@ -42,7 +42,11 @@ export function TimelineStrip() {
     }
     let raf = 0;
     const tick = () => {
-      setElapsed(engine.transportSeconds());
+      // only follow an actual arrangement — a brick or mix preview shouldn't
+      // drag the timeline playhead along with it
+      setElapsed(
+        engine.playbackMode === 'timeline' ? engine.transportSeconds() : null
+      );
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

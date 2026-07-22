@@ -6,6 +6,7 @@ import { MiniRoll } from './MiniRoll';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
 import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
 import { clientToBoard } from '../lib/boardCoords';
+import { useBrickPlayhead, formatRemaining } from '../useBrickPlayhead';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -27,6 +28,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const activeTags = useStore((s) => s.activeTags);
   const [menu, setMenu] = useState<null | 'main' | 'mix' | 'parent'>(null);
   const d = brick.display;
+  const playhead = useBrickPlayhead(brick.id, brick.lengthBeats);
   const myTags = tagsForBrick(brick, mixes);
   const matches = matchesTags(myTags, activeTags);
   const filtering = activeTags.length > 0;
@@ -326,6 +328,11 @@ export function BrickCard({ brick }: { brick: Brick }) {
       <div className="brick-meta">
         {brick.key} · {brick.bpm} BPM · {brick.notes.length} notes
         {brick.parentId && <span className="brick-branch" title="Iteration"> · 🌱</span>}
+        {playhead && (
+          <span className="brick-timecode" title="Time left in this pass">
+            {formatRemaining(playhead.remaining)}
+          </span>
+        )}
       </div>
 
       {d.showChords && brick.chords && <div className="brick-chords">{brick.chords}</div>}
@@ -337,7 +344,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
       )}
       {d.preview && (
         <div className="brick-preview">
-          <MiniRoll brick={brick} />
+          <MiniRoll brick={brick} progress={playhead?.progress ?? null} />
         </div>
       )}
 

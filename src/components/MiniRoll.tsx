@@ -1,15 +1,23 @@
 import type { Brick } from '../types';
 
 /** A tiny non-interactive piano-roll thumbnail for a brick card. */
-export function MiniRoll({ brick, width = 186, height = 52 }: {
+export function MiniRoll({
+  brick,
+  width = 186,
+  height = 52,
+  progress = null,
+}: {
   brick: Brick;
   width?: number;
   height?: number;
+  /** 0..1 through the loop while playing, or null when idle. */
+  progress?: number | null;
 }) {
   const notes = brick.notes;
   if (notes.length === 0) {
     return <div className="mini-roll empty">no notes yet</div>;
   }
+  const playX = progress == null ? null : progress * width;
 
   let minP = Infinity;
   let maxP = -Infinity;
@@ -43,6 +51,16 @@ export function MiniRoll({ brick, width = 186, height = 52 }: {
           />
         );
       })}
+      {playX != null && (
+        <line
+          x1={playX}
+          y1={0}
+          x2={playX}
+          y2={height}
+          stroke="#1c7a4a"
+          strokeWidth={1.5}
+        />
+      )}
     </svg>
   );
 }

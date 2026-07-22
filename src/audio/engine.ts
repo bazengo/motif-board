@@ -135,6 +135,16 @@ class AudioEngine {
   private clickSynth: Tone.MembraneSynth | null = null;
   /** Bumped on every play/stop so an in-flight play can tell it was superseded. */
   private playToken = 0;
+  /** What's playing — the timeline playhead should only follow an arrangement. */
+  private mode: 'idle' | 'clip' | 'timeline' = 'idle';
+
+  get playbackMode(): 'idle' | 'clip' | 'timeline' {
+    return this.mode;
+  }
+  /** Tempo the transport is currently running at. */
+  get bpm(): number {
+    return this.currentBpm;
+  }
 
   /** Wait for sampled instruments to finish loading, so their first notes
    *  aren't silently dropped. Bounded, so a failed load can't hang playback. */
@@ -266,6 +276,7 @@ class AudioEngine {
     this.stop();
     if (items.length === 0) return;
     const token = ++this.playToken;
+    this.mode = 'clip';
     this.activeMixId = mixId ?? null;
 
     // never let a bad tempo reach the transport — NaN there stops everything
@@ -363,6 +374,7 @@ class AudioEngine {
     this.stop();
     if (notes.length === 0) return;
     const token = ++this.playToken;
+    this.mode = 'timeline';
 
     const transport = Tone.getTransport();
     transport.bpm.value = 120; // irrelevant: all times are absolute seconds
@@ -600,6 +612,7 @@ class AudioEngine {
     this.voices.clear();
     this.usedChannels.clear();
     this.activeMixId = null;
+    this.mode = 'idle';
     this.emit(false);
   }
 }

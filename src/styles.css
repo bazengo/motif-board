@@ -735,6 +735,13 @@
 .brick-branch {
   filter: grayscale(0.2);
 }
+.brick-timecode {
+  float: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #12603a;
+  opacity: 1;
+}
 .brick-footer {
   display: flex;
   align-items: center;
