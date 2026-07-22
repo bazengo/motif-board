@@ -27,6 +27,16 @@ export const GRID_OPTIONS: { label: string; beats: number }[] = [
   { label: '1/8 dotted', beats: 0.75 },
 ];
 
+/** Note lengths for the placement palette, as fractions of a whole note. */
+const NOTE_VALUES: { label: string; beats: number; name: string }[] = [
+  { label: '1', beats: 4, name: 'whole' },
+  { label: '1/2', beats: 2, name: 'half' },
+  { label: '1/4', beats: 1, name: 'quarter' },
+  { label: '1/8', beats: 0.5, name: 'eighth' },
+  { label: '1/16', beats: 0.25, name: 'sixteenth' },
+  { label: '1/32', beats: 0.125, name: 'thirty-second' },
+];
+
 /** Melodic rows are a contiguous chromatic range, high pitch first. */
 const MELODIC_PITCHES: number[] = Array.from(
   { length: PITCH_HIGH - PITCH_LOW + 1 },
@@ -93,13 +103,16 @@ export function PianoRoll({
   const pasteNotes = useStore((s) => s.pasteNotes);
   const quantize = useStore((s) => s.quantize);
   const duplicateNotes = useStore((s) => s.duplicateNotes);
+  const lastDur = useStore((s) => s.noteLength);
+  const setLastDur = useStore((s) => s.setNoteLength);
   const activeTemplate = templates.find((t) => t.id === activeBrush) ?? null;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<Marquee>(null);
-  const [lastDur, setLastDur] = useState(1);
   const [playhead, setPlayhead] = useState<number | null>(null);
+  const [dotted, setDotted] = useState(false);
+  const [triplet, setTriplet] = useState(false);
   const dragRef = useRef<Drag>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const velSvgRef = useRef<SVGSVGElement | null>(null);
@@ -499,6 +512,38 @@ export function PianoRoll({
   return (
     <div className="roll-with-vel">
     <div className="roll-editbar">
+      <span className="note-palette" title="Length given to notes you place">
+        {NOTE_VALUES.map((v) => {
+          const beats = v.beats * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
+          return (
+            <button
+              key={v.name}
+              className={
+                'nv-btn' + (Math.abs(beats - lastDur) < 1e-6 ? ' on' : '')
+              }
+              onClick={() => setLastDur(beats)}
+              title={`${v.name}${dotted ? ' dotted' : ''}${triplet ? ' triplet' : ''}`}
+            >
+              {v.label}
+            </button>
+          );
+        })}
+        <button
+          className={'nv-btn mod' + (dotted ? ' on' : '')}
+          onClick={() => setDotted((d) => !d)}
+          title="Dotted (1.5x)"
+        >
+          ·
+        </button>
+        <button
+          className={'nv-btn mod' + (triplet ? ' on' : '')}
+          onClick={() => setTriplet((t) => !t)}
+          title="Triplet (2/3)"
+        >
+          3
+        </button>
+      </span>
+
       <label className="brush-field">
         Grid
         <select

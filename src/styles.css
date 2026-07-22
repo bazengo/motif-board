@@ -1528,6 +1528,39 @@
   margin-bottom: 6px;
   flex-wrap: wrap;
 }
+.note-palette {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #12151b;
+  border: 1px solid #2c313d;
+  border-radius: 7px;
+  padding: 2px;
+}
+.nv-btn {
+  min-width: 30px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: #9aa3b2;
+  border-radius: 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 5px;
+}
+.nv-btn:hover {
+  background: #2a3140;
+  color: #e6e9ef;
+}
+.nv-btn.on {
+  background: #ffd166;
+  color: #23252b;
+  font-weight: 700;
+}
+.nv-btn.mod {
+  min-width: 22px;
+  font-weight: 700;
+}
 .sel-count {
   font-size: 11px;
   color: #ffd166;
