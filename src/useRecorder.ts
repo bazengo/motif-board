@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from './store';
 import { engine } from './audio/engine';
+import { mixAllItems } from './lib/mix';
+import { bricksInGroup } from './lib/groups';
 import {
   onNoteOn,
   onNoteOff,
@@ -20,6 +22,8 @@ export function useRecorder(brickId: string) {
   const [countIn, setCountIn] = useState(true);
   const [quantizeInput, setQuantizeInput] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
+  /** What to play alongside while recording: null, `mix:<id>` or `group:<id>`. */
+  const [backing, setBacking] = useState<string | null>(null);
   const [held, setHeld] = useState<number[]>([]);
 
   // pitch -> beat position where the note started
@@ -133,8 +137,34 @@ export function useRecorder(brickId: string) {
       setCountdown(null);
       pending.current.clear();
       setRecording(true);
-      // loop the brick so you can hear what you're playing against
-      engine.play([{ brick, loop: true, gain: 0.9 }], brick.bpm);
+
+      // loop the brick so you can hear what you're playing against, plus any
+      // chosen backing (a mix or a board group) so you can play along to it
+      const items: Parameters<typeof engine.play>[0] = [
+        { brick, loop: true, gain: 0.9 },
+      ];
+      if (backing) {
+        const [kind, id] = backing.split(':');
+        if (kind === 'mix') {
+          const mix = st.mixes.find((m) => m.id === id);
+          if (mix) {
+            for (const it of mixAllItems(mix, st.bricks)) {
+              // the brick being recorded is already in the list
+              if (it.brick.id !== brick.id) items.push({ ...it, loop: true });
+            }
+          }
+        } else {
+          const group = st.groups.find((g) => g.id === id);
+          if (group) {
+            for (const b of bricksInGroup(group, st.bricks)) {
+              if (b.id !== brick.id)
+                items.push({ brick: b, loop: true, gain: 0.75 });
+            }
+          }
+        }
+      }
+      // everything follows the recorded brick's tempo
+      engine.play(items, brick.bpm);
     };
 
     if (!countIn) {
@@ -152,7 +182,7 @@ export function useRecorder(brickId: string) {
       }, i * msPerBeat);
     }
     setTimeout(begin, beats * msPerBeat);
-  }, [brickId, countIn]);
+  }, [brickId, countIn, backing]);
 
   return {
     octave,
@@ -161,6 +191,8 @@ export function useRecorder(brickId: string) {
     countdown,
     countIn,
     setCountIn,
+    backing,
+    setBacking,
     quantizeInput,
     setQuantizeInput,
     held,

@@ -9,6 +9,7 @@ import {
   type MidiInputInfo,
 } from '../audio/midi-in';
 import { midiToName } from '../audio/engine';
+import { useStore } from '../store';
 import { InfoTip } from './InfoTip';
 import type { useRecorder } from '../useRecorder';
 
@@ -17,6 +18,8 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState<string | null>(getSelectedInputId());
   const [err, setErr] = useState<string | null>(null);
+  const mixes = useStore((s) => s.mixes);
+  const groups = useStore((s) => s.groups);
 
   useEffect(
     () =>
@@ -82,6 +85,37 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
           own tempo and time signature. <strong>Quantize</strong> snaps what you
           play to the current grid — turn it off to keep your exact feel.
         </InfoTip>
+      </div>
+
+      <div className="rec-group">
+        <label className="brush-field">
+          Play along
+          <select
+            value={rec.backing ?? ''}
+            onChange={(e) => rec.setBacking(e.target.value || null)}
+            title="Loop a mix or board group alongside, starting after the count-in"
+          >
+            <option value="">— nothing —</option>
+            {mixes.length > 0 && (
+              <optgroup label="Mixes">
+                {mixes.map((m) => (
+                  <option key={m.id} value={`mix:${m.id}`}>
+                    {m.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {groups.length > 0 && (
+              <optgroup label="Groups">
+                {groups.map((g) => (
+                  <option key={g.id} value={`group:${g.id}`}>
+                    {g.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </label>
       </div>
 
       <div className="rec-group">
