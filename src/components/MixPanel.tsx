@@ -2,6 +2,7 @@ import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
 import { mixAllItems, mixBpm } from '../lib/mix';
+import { InfoTip } from './InfoTip';
 
 export function MixPanel() {
   const mixes = useStore((s) => s.mixes);
@@ -84,23 +85,25 @@ export function MixPanel() {
         </label>
         <label className="tl-field">
           Mix BPM
-          <input
-            type="number"
-            min={20}
-            max={300}
-            value={mixBpm(mix, globalBpm)}
-            disabled={mix.lockBpm}
-            onChange={(e) =>
-              updateMix(mix.id, {
-                bpm: Math.max(20, Math.min(300, Number(e.target.value) || 120)),
-              })
-            }
-          />
+          <span className="tl-inline">
+            <input
+              type="number"
+              min={20}
+              max={300}
+              value={mixBpm(mix, globalBpm)}
+              disabled={mix.lockBpm}
+              onChange={(e) =>
+                updateMix(mix.id, {
+                  bpm: Math.max(20, Math.min(300, Number(e.target.value) || 120)),
+                })
+              }
+            />
+            <InfoTip label="Mix tempo help">
+              Plays member bricks at this rate — their own stored tempos aren't
+              changed. New timeline sections inherit this setting.
+            </InfoTip>
+          </span>
         </label>
-        <p className="mix-hint small">
-          Plays member bricks at this rate — their own stored tempos aren't
-          changed.
-        </p>
       </div>
 
       {rows.length === 0 && (

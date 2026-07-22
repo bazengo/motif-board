@@ -98,3 +98,19 @@ export function keyToSemitone(key: string): number | null {
 }
 
 export const KEYBOARD_HINT = 'A=C, W=C♯, S=D … J=B, K=C. Z / X shift octave.';
+
+/**
+ * Turn a Web MIDI failure into something actionable. Firefox reports
+ * "WebMIDI requires a site permission add-on to activate" — it doesn't support
+ * Web MIDI natively, unlike Chrome/Edge.
+ */
+export function describeMidiError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const firefox =
+    /site permission add-?on/i.test(msg) ||
+    navigator.userAgent.includes('Firefox');
+  if (firefox) {
+    return 'Firefox does not support Web MIDI natively — it needs a site permission add-on. Chrome or Edge work out of the box, so opening the app there is the quickest fix. (Computer-keyboard input works in any browser.)';
+  }
+  return msg;
+}

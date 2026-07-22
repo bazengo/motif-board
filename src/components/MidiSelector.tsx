@@ -10,6 +10,7 @@ import {
   type MidiOutputInfo,
 } from '../audio/midi-out';
 import { engine } from '../audio/engine';
+import { InfoTip } from './InfoTip';
 
 function sendTestNote() {
   const out = getSelectedOutput();
@@ -128,10 +129,14 @@ export function MidiSelector() {
                 🔔 Send test note (C4)
               </button>
               <p className="midi-hint">
-                In Kontakt: enable this port under MIDI input and set the
-                instrument to receive on <strong>channel&nbsp;1</strong> (or
-                Omni). Each mix layer sends on its own channel (1–16), so a
-                multi-rack can give every layer a different sound.
+                Kontakt setup
+                <InfoTip label="Kontakt setup">
+                  Enable this port under Kontakt's MIDI input and set the
+                  instrument to receive on <strong>channel&nbsp;1</strong> (or
+                  Omni). Each mix layer sends on its own channel (1–16), so a
+                  multi-rack can give every layer a different sound. Percussion
+                  bricks always send on <strong>channel&nbsp;10</strong>.
+                </InfoTip>
               </p>
               <label className="audition-toggle">
                 <input

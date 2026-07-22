@@ -4,6 +4,7 @@ import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { PianoRoll } from './PianoRoll';
 import { RecordBar } from './RecordBar';
+import { InfoTip } from './InfoTip';
 import { useRecorder } from '../useRecorder';
 import {
   NOTE_NAMES,
@@ -230,11 +231,18 @@ export function BrickEditor() {
                 />
                 🔊 Hear notes as I place them
               </label>
-              <p className="roll-help">
-                Click to add · drag to move · drag empty area to box-select ·
-                shift-click to multi-select · drag right edge to resize ·
-                Delete removes selection · green rows are in-scale
-              </p>
+              <span className="roll-help">
+                Editing
+                <InfoTip label="Piano roll help">
+                  <strong>Click</strong> empty grid to add · <strong>drag</strong>{' '}
+                  a note to move · drag its <strong>right edge</strong> to resize
+                  · drag empty space to <strong>box-select</strong> ·{' '}
+                  <strong>shift-click</strong> to multi-select ·{' '}
+                  <strong>Delete</strong> removes the selection ·{' '}
+                  <strong>Ctrl+C/X/V</strong> copy, cut, paste. Green rows are
+                  in-scale.
+                </InfoTip>
+              </span>
             </div>
           </div>
 
@@ -293,29 +301,33 @@ export function BrickEditor() {
                   ))}
                 </div>
 
-                <label className="side-label">Chords</label>
+                <label className="side-label">
+                  Chords
+                  <InfoTip label="Chord input help">
+                    Recognised: triads <code>C</code> <code>Am</code>{' '}
+                    <code>F#m</code>, sevenths <code>Cmaj7</code>{' '}
+                    <code>G7</code>, sus / add <code>Csus4</code>{' '}
+                    <code>Cadd9</code>, extensions <code>C9</code>{' '}
+                    <code>Am11</code>, and slash chords / inversions{' '}
+                    <code>C/E</code> <code>G/B</code> — the note after the slash
+                    becomes the bass. Lowercase is fine; separate with spaces,
+                    dashes or bars. Shared with the Notes &amp; lyrics tab.
+                  </InfoTip>
+                </label>
                 <textarea
                   rows={2}
                   placeholder="Am F C G"
                   value={brick.chords}
                   onChange={(e) => updateBrick(brick.id, { chords: e.target.value })}
                 />
-                <p className="side-hint">
-                  Recognised inputs: triads <code>C</code> <code>Am</code>{' '}
-                  <code>F#m</code>, sevenths <code>Cmaj7</code> <code>G7</code>,
-                  sus / add <code>Csus4</code> <code>Cadd9</code>, extensions{' '}
-                  <code>C9</code> <code>Am11</code>, and slash chords /
-                  inversions <code>C/E</code> <code>G/B</code> (the note after
-                  the slash becomes the bass). Lowercase is fine; separate with
-                  spaces, dashes or bars. This field is shared with the Notes
-                  &amp; lyrics tab.
-                </p>
 
-                <label className="side-label">Stamp chords into the roll</label>
-                <p className="side-hint">
-                  Lays the chords above out as note blocks tiled evenly across
-                  the brick's {brick.lengthBeats} beats.
-                </p>
+                <label className="side-label">
+                  Stamp chords into the roll
+                  <InfoTip label="Stamp help">
+                    Lays the chords above out as note blocks, tiled evenly
+                    across the brick's {brick.lengthBeats} beats.
+                  </InfoTip>
+                </label>
                 {parsedChords.length === 0 ? (
                   <p className="side-hint empty">
                     No chords recognised yet — type names like{' '}

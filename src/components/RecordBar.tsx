@@ -5,10 +5,11 @@ import {
   selectInput,
   getSelectedInputId,
   onInputChange,
-  KEYBOARD_HINT,
+  describeMidiError,
   type MidiInputInfo,
 } from '../audio/midi-in';
 import { midiToName } from '../audio/engine';
+import { InfoTip } from './InfoTip';
 import type { useRecorder } from '../useRecorder';
 
 export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
@@ -31,7 +32,7 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
     try {
       const ok = await ensureMidiIn();
       if (!ok) {
-        setErr('Web MIDI unavailable — use Chrome or Edge, opened directly.');
+        setErr(describeMidiError(new Error('unsupported')));
         return;
       }
       setEnabled(true);
@@ -42,7 +43,7 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
         setSelected(list[0].id);
       }
     } catch (e) {
-      setErr('MIDI access was blocked: ' + (e instanceof Error ? e.message : String(e)));
+      setErr(describeMidiError(e));
     }
   }
 
@@ -51,55 +52,72 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
       <button
         className={'rec-btn' + (rec.recording ? ' on' : '')}
         onClick={() => (rec.recording ? rec.stop() : rec.start())}
-        title={rec.recording ? 'Stop recording' : 'Arm and record'}
       >
         {rec.recording ? '■ Stop' : '● Record'}
       </button>
 
-      {rec.countdown != null && (
-        <span className="rec-count">{rec.countdown}</span>
-      )}
+      {/* fixed slot so the countdown appearing doesn't shift the row */}
+      <span className="rec-count">{rec.countdown ?? ''}</span>
 
-      <label className="brush-check">
-        <input
-          type="checkbox"
-          checked={rec.countIn}
-          onChange={(e) => rec.setCountIn(e.target.checked)}
-        />
-        Count-in
-      </label>
-      <label className="brush-check">
-        <input
-          type="checkbox"
-          checked={rec.quantizeInput}
-          onChange={(e) => rec.setQuantizeInput(e.target.checked)}
-        />
-        Quantize input
-      </label>
+      <div className="rec-group">
+        <label className="brush-check">
+          <input
+            type="checkbox"
+            checked={rec.countIn}
+            onChange={(e) => rec.setCountIn(e.target.checked)}
+          />
+          Count-in
+        </label>
+        <label className="brush-check">
+          <input
+            type="checkbox"
+            checked={rec.quantizeInput}
+            onChange={(e) => rec.setQuantizeInput(e.target.checked)}
+          />
+          Quantize
+        </label>
+        <InfoTip label="Recording help">
+          <strong>Record</strong> captures what you play against the looping
+          brick. <strong>Count-in</strong> ticks one bar first at this brick's
+          own tempo and time signature. <strong>Quantize</strong> snaps what you
+          play to the current grid — turn it off to keep your exact feel.
+        </InfoTip>
+      </div>
 
-      <label className="brush-field">
-        Octave
-        <input
-          type="number"
-          min={0}
-          max={8}
-          value={rec.octave}
-          onChange={(e) => rec.setOctave(Number(e.target.value) || 4)}
-          style={{ width: 52 }}
-        />
-      </label>
+      <div className="rec-group">
+        <span className="rec-label">Oct</span>
+        <button
+          className="oct-btn"
+          onClick={() => rec.setOctave(Math.max(0, rec.octave - 1))}
+        >
+          −
+        </button>
+        <span className="oct-value">{rec.octave}</span>
+        <button
+          className="oct-btn"
+          onClick={() => rec.setOctave(Math.min(8, rec.octave + 1))}
+        >
+          +
+        </button>
+      </div>
 
-      <span className="rec-held">
-        {rec.held.length > 0
-          ? rec.held.map((p) => midiToName(p)).join(' ')
-          : KEYBOARD_HINT}
+      {/* fixed width: held notes replace nothing, so the row never reflows */}
+      <span className="rec-held" title="Notes currently held">
+        {rec.held.length > 0 ? rec.held.map((p) => midiToName(p)).join(' ') : '—'}
       </span>
+      <InfoTip label="Keyboard layout">
+        Play with the computer keyboard: <strong>A</strong>=C,{' '}
+        <strong>W</strong>=C♯, <strong>S</strong>=D, <strong>E</strong>=D♯,{' '}
+        <strong>D</strong>=E, <strong>F</strong>=F … <strong>J</strong>=B,{' '}
+        <strong>K</strong>=C above. <strong>Z</strong> / <strong>X</strong> shift
+        octave. Works in any browser.
+      </InfoTip>
 
       <span className="brush-spacer" />
 
       {!enabled ? (
         <button className="ghost-btn brush-btn" onClick={enable}>
-          🎹 Enable MIDI in
+          🎹 MIDI device
         </button>
       ) : (
         <label className="brush-field">
@@ -121,7 +139,15 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
           </select>
         </label>
       )}
-      {err && <span className="rec-err">{err}</span>}
+
+      {err && (
+        <div className="rec-err">
+          {err}
+          <button className="rec-err-x" onClick={() => setErr(null)}>
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

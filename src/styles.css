@@ -858,6 +858,19 @@
 .roll-toolbar .roll-help {
   margin: 0;
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tl-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.midi-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .audition-toggle {
   display: flex;
@@ -947,7 +960,9 @@
   overflow-y: auto;
 }
 .side-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1112,20 +1127,121 @@
   }
 }
 .rec-count {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 800;
   color: #ffd166;
-  min-width: 22px;
+  width: 20px;
+  flex-shrink: 0;
   text-align: center;
 }
+.rec-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border-left: 1px solid #2c313d;
+}
+.rec-label {
+  font-size: 11px;
+  color: #9aa3b2;
+}
+.oct-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid #3a4150;
+  background: #1c212b;
+  color: #cfd4de;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+.oct-btn:hover {
+  background: #2a3140;
+}
+.oct-value {
+  font-size: 12px;
+  color: #e6e9ef;
+  width: 12px;
+  text-align: center;
+}
+/* fixed width so held notes appearing never reflows the row */
 .rec-held {
   font-size: 11px;
-  color: #8a92a3;
+  color: #b7bfce;
   font-family: monospace;
+  width: 132px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #1b1f27;
+  border: 1px solid #2c313d;
+  border-radius: 5px;
+  padding: 4px 7px;
 }
 .rec-err {
+  flex-basis: 100%;
   font-size: 11px;
+  line-height: 1.5;
   color: #ffb3b3;
+  background: rgba(255, 90, 90, 0.1);
+  border: 1px solid rgba(255, 90, 90, 0.3);
+  border-radius: 6px;
+  padding: 7px 9px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.rec-err-x {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #ffb3b3;
+  padding: 0 2px;
+}
+
+/* ---------- Info tooltips ---------- */
+.infotip-btn {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid #4a5364;
+  background: transparent;
+  color: #9aa3b2;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.infotip-btn:hover,
+.infotip-btn:focus-visible {
+  border-color: #ffd166;
+  color: #ffd166;
+}
+.infotip-bubble {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 500;
+  max-width: 290px;
+  background: #23252b;
+  border: 1px solid #3a3f4b;
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #dfe4ee;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.infotip-bubble strong {
+  color: #ffd166;
 }
 
 .roll-editbar {
