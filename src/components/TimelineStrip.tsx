@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportTimeline } from '../lib/midi';
@@ -26,6 +26,10 @@ export function TimelineStrip() {
   const [playing, setPlaying] = useState(false);
   const [pxPerSec, setPxPerSec] = useState(36);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const laneRef = useRef<HTMLDivElement | null>(null);
+  const linking = useStore((s) => s.linking);
 
   useEffect(() => engine.onChange(setPlaying), []);
 
@@ -80,8 +84,56 @@ export function TimelineStrip() {
     if (plan.notes.length) engine.playPlan(plan.notes, plan.totalSeconds);
   }
 
+  /** Drag a block along the lane to reorder the arrangement. */
+  function onBlockDown(e: React.PointerEvent, section: { id: string }, i: number) {
+    if (e.button !== 0) return;
+    setSelectedId(section.id);
+    const startX = e.clientX;
+    let dragging = false;
+
+    const indexAt = (clientX: number) => {
+      const lane = laneRef.current;
+      if (!lane) return i;
+      const x = clientX - lane.getBoundingClientRect().left;
+      const secs = x / pxPerSec;
+      // which section does this time land in?
+      let idx = plan.starts.findIndex((s, k) => {
+        const end = plan.starts[k + 1] ?? plan.totalSeconds;
+        return secs >= s && secs < end;
+      });
+      if (idx < 0) idx = secs <= 0 ? 0 : timeline.length - 1;
+      return idx;
+    };
+
+    const move = (ev: PointerEvent) => {
+      if (!dragging && Math.abs(ev.clientX - startX) > 4) {
+        dragging = true;
+        setDragId(section.id);
+      }
+      if (dragging) setDropIndex(indexAt(ev.clientX));
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (dragging) {
+        const to = indexAt(ev.clientX);
+        if (to !== i) moveSection(section.id, to);
+      }
+      setDragId(null);
+      setDropIndex(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
   return (
-    <div className={'timeline-wrap' + (collapsed ? ' collapsed' : '')}>
+    <div
+      className={
+        'timeline-wrap' +
+        (collapsed ? ' collapsed' : '') +
+        (linking?.kind === 'timeline' ? ' drop-target' : '')
+      }
+    >
       <div className="timeline-head">
         <button
           className="ghost-btn tl-collapse"
@@ -148,7 +200,11 @@ export function TimelineStrip() {
               </div>
 
               {/* the lane — keeps .timeline-strip so mix nodes can be dropped here */}
-              <div className="timeline-strip" style={{ height: LANE_H }}>
+              <div
+                className="timeline-strip"
+                ref={laneRef}
+                style={{ height: LANE_H }}
+              >
                 {timeline.length === 0 && (
                   <div className="tl-empty">
                     Drag the <strong>⇩</strong> handle on a mix node down here to
@@ -173,15 +229,19 @@ export function TimelineStrip() {
                       className={
                         'tl-block' +
                         (activeIndex === i ? ' active' : '') +
-                        (selected?.id === section.id ? ' selected' : '')
+                        (selected?.id === section.id ? ' selected' : '') +
+                        (dragId === section.id ? ' dragging' : '') +
+                        (dragId && dropIndex === i && dragId !== section.id
+                          ? ' drop-here'
+                          : '')
                       }
                       style={{
                         left: start * pxPerSec,
                         width: w,
                         borderColor: mix.color,
                       }}
-                      onClick={() => setSelectedId(section.id)}
-                      title={`${mix.name} — ${formatDuration(dur)}`}
+                      onPointerDown={(e) => onBlockDown(e, section, i)}
+                      title={`${mix.name} — ${formatDuration(dur)} · drag to reorder`}
                     >
                       <div
                         className="tl-block-head"

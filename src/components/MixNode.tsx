@@ -75,7 +75,9 @@ export function MixNode({ mix }: { mix: Mix }) {
       // the strip lives outside the board's coordinate space, so hit-test the
       // real DOM instead of doing maths across containers
       const el = document.elementFromPoint(ev.clientX, ev.clientY);
-      const strip = el?.closest('.timeline-strip');
+      // the whole timeline panel is the drop zone — the lane alone is a thin
+      // target now that blocks are proportional
+      const strip = el?.closest('.timeline-wrap');
       if (strip) {
         const overSection = el?.closest('[data-section-index]') as HTMLElement | null;
         const idx = overSection

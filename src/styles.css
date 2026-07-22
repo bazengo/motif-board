@@ -344,6 +344,19 @@
 .tl-block.selected {
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
 }
+.tl-block.dragging {
+  opacity: 0.45;
+}
+.tl-block.drop-here {
+  box-shadow: inset 0 0 0 2px #ffd166;
+}
+/* the whole panel lights up while a mix is being dragged down to it */
+.timeline-wrap.drop-target {
+  box-shadow: inset 0 0 0 2px #95d5b2;
+}
+.timeline-wrap.drop-target .timeline-strip {
+  border-color: #95d5b2;
+}
 .tl-block-head {
   height: 15px;
   color: #16181d;
@@ -524,6 +537,23 @@
 .mix-node-actions {
   display: flex;
   gap: 4px;
+}
+/* .mini-btn is tuned for light sticky cards; on the dark mix node its
+   near-black text was invisible, which hid the delete button entirely */
+.mix-node-actions .mini-btn {
+  background: #262b36;
+  border-color: #3a4150;
+  color: #dfe4ee;
+}
+.mix-node-actions .mini-btn:hover {
+  background: #333b49;
+}
+.mix-node-actions .mini-btn.danger {
+  color: #ff8a8a;
+  border-color: #5c2a33;
+}
+.mix-node-actions .mini-btn.danger:hover {
+  background: #4a2028;
 }
 
 /* ---------- Mix membership tags on brick cards ---------- */
