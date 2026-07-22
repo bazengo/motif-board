@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
 import { mixAllItems, mixBpm } from '../lib/mix';
+import { mixLengthBeats } from '../lib/timeline';
 import { InfoTip } from './InfoTip';
 import { AutomationEditor } from './AutomationEditor';
 import { MIX_COLORS } from '../types';
@@ -202,6 +203,8 @@ export function MixPanel() {
               <AutomationEditor
                 points={l.automation ?? []}
                 color={brick!.color}
+                lengthBeats={mixLengthBeats(mix, bricks)}
+                bpm={mixBpm(mix, globalBpm)}
                 onChange={(pts) =>
                   updateLayer(mix.id, l.brickId, { automation: pts })
                 }

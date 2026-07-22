@@ -79,11 +79,21 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
           />
           Quantize
         </label>
+        <label className="brush-check">
+          <input
+            type="checkbox"
+            checked={rec.metronome}
+            onChange={(e) => rec.setMetronome(e.target.checked)}
+          />
+          🎵 Click
+        </label>
         <InfoTip label="Recording help">
           <strong>Record</strong> captures what you play against the looping
           brick. <strong>Count-in</strong> ticks one bar first at this brick's
           own tempo and time signature. <strong>Quantize</strong> snaps what you
-          play to the current grid — turn it off to keep your exact feel.
+          play to the current grid — turn it off to keep your exact feel.{' '}
+          <strong>Click</strong> keeps the metronome going through the take, not
+          just the count-in.
         </InfoTip>
       </div>
 

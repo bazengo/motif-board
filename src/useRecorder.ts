@@ -24,6 +24,7 @@ export function useRecorder(brickId: string) {
   const [countdown, setCountdown] = useState<number | null>(null);
   /** What to play alongside while recording: null, `mix:<id>` or `group:<id>`. */
   const [backing, setBacking] = useState<string | null>(null);
+  const [metronome, setMetronome] = useState(false);
   const [held, setHeld] = useState<number[]>([]);
 
   // pitch -> beat position where the note started
@@ -165,6 +166,8 @@ export function useRecorder(brickId: string) {
       }
       // everything follows the recorded brick's tempo
       engine.play(items, brick.bpm);
+      if (metronome) engine.startMetronome(brick.timeSig?.num ?? 4);
+      else engine.stopMetronome();
     };
 
     if (!countIn) {
@@ -182,7 +185,7 @@ export function useRecorder(brickId: string) {
       }, i * msPerBeat);
     }
     setTimeout(begin, beats * msPerBeat);
-  }, [brickId, countIn, backing]);
+  }, [brickId, countIn, backing, metronome]);
 
   return {
     octave,
@@ -193,6 +196,8 @@ export function useRecorder(brickId: string) {
     setCountIn,
     backing,
     setBacking,
+    metronome,
+    setMetronome,
     quantizeInput,
     setQuantizeInput,
     held,

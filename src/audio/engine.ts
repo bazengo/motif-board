@@ -165,6 +165,7 @@ class AudioEngine {
   private previewSynths = new Map<string, Voiceable>();
   private activeMixId: string | null = null;
   private clickSynth: Tone.MembraneSynth | null = null;
+  private metroId: number | null = null;
   /** Bumped on every play/stop so an in-flight play can tell it was superseded. */
   private playToken = 0;
   /** What's playing — the timeline playhead should only follow an arrangement. */
@@ -738,16 +739,45 @@ class AudioEngine {
     }
   }
 
-  /** Metronome tick for count-in. */
-  async metronomeClick(accent = false) {
-    await this.ensureStarted();
+  private ensureClick(): Tone.MembraneSynth {
     if (!this.clickSynth) {
       this.clickSynth = new Tone.MembraneSynth({
         octaves: 2,
         envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 },
       }).toDestination();
     }
-    this.clickSynth.triggerAttackRelease(accent ? 'C6' : 'G5', 0.05);
+    return this.clickSynth;
+  }
+
+  /** Metronome tick for count-in. */
+  async metronomeClick(accent = false) {
+    await this.ensureStarted();
+    this.ensureClick().triggerAttackRelease(accent ? 'C6' : 'G5', 0.05);
+  }
+
+  /** Click every beat while the transport runs, accenting each downbeat. */
+  startMetronome(beatsPerBar = 4) {
+    this.stopMetronome();
+    const transport = Tone.getTransport();
+    const secPerBeat = 60 / (this.currentBpm || 120);
+    const click = this.ensureClick();
+    let beat = 0;
+    this.metroId = transport.scheduleRepeat(
+      (time) => {
+        const accent = beat % Math.max(1, beatsPerBar) === 0;
+        beat++;
+        click.triggerAttackRelease(accent ? 'C6' : 'G5', 0.05, time);
+      },
+      secPerBeat,
+      PART_LEAD
+    );
+  }
+
+  stopMetronome() {
+    if (this.metroId !== null) {
+      Tone.getTransport().clear(this.metroId);
+      this.metroId = null;
+    }
   }
 
   /** Audition a single pitch (used when placing notes). */
@@ -800,6 +830,7 @@ class AudioEngine {
     transport.cancel();
     transport.loop = false;
     this.paused = false;
+    this.stopMetronome();
     this.allNotesOff();
     for (const v of this.voices.values()) {
       v.part.dispose();
