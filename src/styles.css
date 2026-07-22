@@ -1095,6 +1095,41 @@
   border: 1px solid #2b303b;
   border-radius: 8px;
   padding: 8px;
+  /* the automation card expands onto its own line below the controls */
+  flex-wrap: wrap;
+}
+
+/* ---------- Volume automation ---------- */
+.auto-editor {
+  flex-basis: 100%;
+  margin-top: 6px;
+  border-top: 1px solid #2b303b;
+  padding-top: 8px;
+}
+.auto-svg {
+  display: block;
+  max-width: 100%;
+  border: 1px solid #2c313d;
+  border-radius: 6px;
+  cursor: crosshair;
+  user-select: none;
+}
+.auto-point {
+  cursor: grab;
+  stroke: #12151b;
+  stroke-width: 1.5;
+}
+.auto-point:hover {
+  stroke: #fff;
+}
+.auto-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 10px;
+  color: #7f8798;
 }
 .mix-dot {
   width: 12px;

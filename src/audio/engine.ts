@@ -1,8 +1,15 @@
 import * as Tone from 'tone';
 import { Note as TonalNote } from 'tonal';
-import type { Brick, InstrumentId, Mix, Envelope } from '../types';
+import type {
+  Brick,
+  InstrumentId,
+  Mix,
+  Envelope,
+  AutomationPoint,
+} from '../types';
 import { DEFAULT_ENVELOPE } from '../types';
 import { layerLevels } from '../lib/mix';
+import { evaluateAutomation, hasAutomation, sortPoints } from '../lib/automation';
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
 import { DrumKit } from './drumkit';
@@ -116,7 +123,15 @@ function brickSignature(brick: Brick): string {
 interface Voice {
   brickId: string;
   synth: Voiceable | null; // null when monitoring is off (MIDI-only)
+  /** Fader level, driven by the mix panel. */
   volume: Tone.Volume | null;
+  /** Automation rides its own node so envelope ramps and the fader can't
+   *  fight over one AudioParam — they simply multiply. */
+  autoVol: Tone.Volume | null;
+  automation: AutomationPoint[];
+  autoSig: string;
+  autoId: number | null;
+  loopSec: number;
   part: Tone.Part<NoteEvent>;
   channel: number;
   instrument: InstrumentId;
@@ -127,7 +142,12 @@ interface Voice {
   sig: string;
 }
 
-type PlayItem = { brick: Brick; loop: boolean; gain: number };
+type PlayItem = {
+  brick: Brick;
+  loop: boolean;
+  gain: number;
+  automation?: AutomationPoint[];
+};
 
 function gainToDb(gain: number): number {
   // floor rather than -Infinity so the value can be ramped smoothly
@@ -286,9 +306,62 @@ class AudioEngine {
     out.send([0x80 | voice.channel, pitch, 0], performance.now() + durSec * 1000);
   }
 
+  /**
+   * Lay the layer's volume envelope down over each pass. Scheduled per pass
+   * rather than once, so it repeats with the loop and picks up edits.
+   */
+  private scheduleAutomation(voice: Voice, startAt: number) {
+    const transport = Tone.getTransport();
+    if (voice.autoId !== null) {
+      transport.clear(voice.autoId);
+      voice.autoId = null;
+    }
+    const av = voice.autoVol;
+    if (!av) return;
+    if (!hasAutomation(voice.automation)) {
+      av.volume.cancelScheduledValues(0);
+      av.volume.value = 0; // 0 dB — no change
+      return;
+    }
+    const len = Math.max(0.05, voice.loopSec);
+    voice.autoId = transport.scheduleRepeat(
+      (time) => {
+        const pts = sortPoints(voice.automation);
+        av.volume.cancelScheduledValues(time);
+        av.volume.setValueAtTime(
+          gainToDb(evaluateAutomation(pts, 0)),
+          time
+        );
+        for (const p of pts) {
+          const at = time + Math.max(0, Math.min(1, p.t)) * len;
+          av.volume.linearRampToValueAtTime(gainToDb(p.v), at);
+        }
+        // hold the final value to the end of the pass
+        av.volume.linearRampToValueAtTime(
+          gainToDb(evaluateAutomation(pts, 1)),
+          time + len
+        );
+      },
+      len,
+      startAt
+    );
+  }
+
+  /** Transport time of the next pass boundary for a voice. */
+  private nextPassStart(loopSec: number): number {
+    const len = Math.max(0.05, loopSec);
+    const elapsed = Math.max(0, Tone.getTransport().seconds - PART_LEAD);
+    return PART_LEAD + Math.ceil((elapsed + 0.05) / len) * len;
+  }
+
   private disposeVoice(voice: Voice) {
+    if (voice.autoId !== null) {
+      Tone.getTransport().clear(voice.autoId);
+      voice.autoId = null;
+    }
     voice.part?.dispose();
     voice.synth?.dispose();
+    voice.autoVol?.dispose();
     voice.volume?.dispose();
     const out = getSelectedOutput();
     if (out) out.send([0xb0 | voice.channel, 123, 0]); // all notes off
@@ -301,15 +374,19 @@ class AudioEngine {
     gain: number,
     channel: number,
     secPerBeat: number,
-    startAt: number
+    startAt: number,
+    automation: AutomationPoint[] = []
   ): Voice {
     const midiActive = !!getSelectedOutput();
     const internalOn = this.monitorInternal || !midiActive;
     let volume: Tone.Volume | null = null;
+    let autoVol: Tone.Volume | null = null;
     let synth: Voiceable | null = null;
     if (internalOn) {
+      // synth -> automation -> fader -> out
       volume = new Tone.Volume(gainToDb(gain)).toDestination();
-      synth = makeVoiceFor(brick).connect(volume);
+      autoVol = new Tone.Volume(0).connect(volume);
+      synth = makeVoiceFor(brick).connect(autoVol);
       if (synth instanceof DrumKit) synth.prime(brick.notes.map((n) => n.pitch));
     }
 
@@ -317,6 +394,11 @@ class AudioEngine {
       brickId: brick.id,
       synth,
       volume,
+      autoVol,
+      automation,
+      autoSig: JSON.stringify(automation),
+      autoId: null,
+      loopSec: Math.max(0.05, brick.lengthBeats * secPerBeat),
       part: null as unknown as Tone.Part<NoteEvent>,
       channel,
       instrument: brick.instrument,
@@ -333,6 +415,7 @@ class AudioEngine {
     part.loopEnd = beatsToBBS(brick.lengthBeats);
     part.start(startAt);
     voice.part = part;
+    this.scheduleAutomation(voice, startAt);
     return voice;
   }
 
@@ -366,51 +449,26 @@ class AudioEngine {
     transport.position = 0;
     this.currentBpm = safeBpm;
     const secPerBeat = 60 / safeBpm;
-    const midiActive = !!getSelectedOutput();
-    const internalOn = this.monitorInternal || !midiActive;
 
     let anyLoop = false;
     let maxEndBeats = 0;
     let index = 0;
 
-    for (const { brick, loop, gain } of items) {
+    for (const { brick, loop, gain, automation } of items) {
       // percussion bricks always use GM channel 10 so drum kits respond;
       // melodic layers get their own channel so a multi-rack can separate them
       const channel = brick.percussion ? DRUM_CHANNEL : index % 16;
       this.usedChannels.add(channel);
 
-      let volume: Tone.Volume | null = null;
-      let synth: Voiceable | null = null;
-      if (internalOn) {
-        volume = new Tone.Volume(gainToDb(gain)).toDestination();
-        synth = makeVoiceFor(brick).connect(volume);
-      }
-
-      const voice: Voice = {
-        brickId: brick.id,
-        synth,
-        volume,
-        part: null as unknown as Tone.Part<NoteEvent>,
-        channel,
-        instrument: brick.instrument,
-        envSig: envSignature(brick),
+      const voice = this.createVoice(
+        brick,
         loop,
-        lengthBeats: brick.lengthBeats,
-        level: gain,
-        sig: brickSignature(brick),
-      };
-
-      // build drum voices up front — creating them inside the first trigger
-      // callback can swallow that hit
-      if (synth instanceof DrumKit) synth.prime(brick.notes.map((n) => n.pitch));
-
-      const part = this.makePart(voice, buildEvents(brick, secPerBeat));
-      part.loop = loop;
-      part.loopStart = 0;
-      part.loopEnd = beatsToBBS(brick.lengthBeats);
-      part.start(PART_LEAD);
-      voice.part = part;
-
+        gain,
+        channel,
+        secPerBeat,
+        PART_LEAD,
+        automation ?? []
+      );
       this.voices.set(brick.id, voice);
       anyLoop = anyLoop || loop;
       for (const n of brick.notes) {
@@ -494,6 +552,13 @@ class AudioEngine {
         brickId,
         synth,
         volume,
+        // the arrangement bakes automation into note velocity, so this voice
+        // needs no envelope node of its own
+        autoVol: null,
+        automation: [],
+        autoSig: '[]',
+        autoId: null,
+        loopSec: 0,
         part: null as unknown as Tone.Part<NoteEvent>,
         channel,
         instrument: brick.instrument,
@@ -633,7 +698,8 @@ class AudioEngine {
             levels.get(layer.brickId) ?? 0,
             channel,
             secPerBeat,
-            startAt
+            startAt,
+            layer.automation ?? []
           )
         );
       }
@@ -644,9 +710,18 @@ class AudioEngine {
     // per-layer loop toggles apply live, like mute/solo/gain
     for (const layer of mix.layers) {
       const voice = this.voices.get(layer.brickId);
-      if (voice && voice.loop !== layer.loop) {
+      if (!voice) continue;
+      if (voice.loop !== layer.loop) {
         voice.loop = layer.loop;
         voice.part.loop = layer.loop;
+      }
+      // edited envelopes take effect from the next pass, so a redraw never
+      // jumps the level mid-phrase
+      const sig = JSON.stringify(layer.automation ?? []);
+      if (sig !== voice.autoSig) {
+        voice.autoSig = sig;
+        voice.automation = layer.automation ?? [];
+        this.scheduleAutomation(voice, this.nextPassStart(voice.loopSec));
       }
     }
 

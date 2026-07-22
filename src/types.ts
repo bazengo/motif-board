@@ -108,6 +108,14 @@ export const TIME_SIGNATURES: { num: number; den: number }[] = [
   { num: 12, den: 8 },
 ];
 
+/** A breakpoint on a layer's volume envelope. */
+export interface AutomationPoint {
+  /** Position through one pass of the mix, 0..1. */
+  t: number;
+  /** Level multiplier at that point, 0..1. */
+  v: number;
+}
+
 /** One brick's participation in a mix (Phase 1 "stack" model). */
 export interface MixLayer {
   brickId: string;
@@ -115,6 +123,8 @@ export interface MixLayer {
   mute: boolean;
   solo: boolean;
   gain: number; // 0..1
+  /** Volume envelope over one pass, repeating. Empty = no automation. */
+  automation?: AutomationPoint[];
 }
 
 /** A named combination of bricks that live as a node on the board. Bricks

@@ -1,5 +1,6 @@
 import type { Brick, Mix, TimelineSection } from '../types';
 import { mixPlayItems } from './mix';
+import { evaluateAutomation } from './automation';
 
 /** A mix is as long as its longest brick (in quarter-note beats). */
 export function mixLengthBeats(mix: Mix, bricks: Brick[]): number {
@@ -78,7 +79,7 @@ export function buildTimelinePlan(
 
     for (let r = 0; r < repeats; r++) {
       const base = t + r * loopBeats * secPerBeat;
-      for (const { brick, gain, loop } of items) {
+      for (const { brick, gain, loop, automation } of items) {
         // A brick shorter than the mix repeats to fill the pass, matching how
         // mix playback loops each layer at its own length. Layers with looping
         // switched off play once per pass instead.
@@ -90,13 +91,17 @@ export function buildTimelinePlan(
             const startBeat = offset + n.start;
             // a repeat may overhang the pass — don't start notes past its end
             if (startBeat >= loopBeats - 1e-9) continue;
+            // Volume automation is sampled at the note's position in the pass
+            // and folded in with the gain. Baked rather than ramped, so a long
+            // note keeps the level it started at.
+            const auto = evaluateAutomation(automation, startBeat / loopBeats);
             notes.push({
               brick,
               pitch: n.pitch,
               time: base + startBeat * secPerBeat,
               dur: n.duration * secPerBeat,
               // layer gain is folded into velocity so one synth per brick is enough
-              velocity: Math.max(0.01, Math.min(1, n.velocity * gain)),
+              velocity: Math.max(0.01, Math.min(1, n.velocity * gain * auto)),
             });
           }
         }

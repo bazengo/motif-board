@@ -37,6 +37,7 @@ export function mixAllItems(mix: Mix, bricks: Brick[]) {
       brick: r.brick,
       loop: r.l.loop,
       gain: levels.get(r.l.brickId) ?? 0,
+      automation: r.l.automation ?? [],
     }));
 }
 
@@ -48,5 +49,10 @@ export function mixPlayItems(mix: Mix, bricks: Brick[]) {
   const anySolo = rows.some((r) => r.l.solo);
   return rows
     .filter((r) => !r.l.mute && (!anySolo || r.l.solo))
-    .map((r) => ({ brick: r.brick, loop: r.l.loop, gain: r.l.gain }));
+    .map((r) => ({
+      brick: r.brick,
+      loop: r.l.loop,
+      gain: r.l.gain,
+      automation: r.l.automation ?? [],
+    }));
 }

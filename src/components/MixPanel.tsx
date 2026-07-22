@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
 import { mixAllItems, mixBpm } from '../lib/mix';
 import { InfoTip } from './InfoTip';
+import { AutomationEditor } from './AutomationEditor';
 import { MIX_COLORS } from '../types';
 
 export function MixPanel() {
@@ -14,6 +16,7 @@ export function MixPanel() {
   const addMix = useStore((s) => s.addMix);
   const updateMix = useStore((s) => s.updateMix);
   const openEditor = useStore((s) => s.openEditor);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const updateLayer = useStore((s) => s.updateLayer);
   const toggleBrickInMix = useStore((s) => s.toggleBrickInMix);
 
@@ -176,6 +179,17 @@ export function MixPanel() {
                 title="Volume"
               />
               <button
+                className={
+                  'tag-btn' + ((l.automation?.length ?? 0) > 0 ? ' on' : '')
+                }
+                onClick={() =>
+                  setExpanded(expanded === l.brickId ? null : l.brickId)
+                }
+                title="Volume automation over one pass"
+              >
+                ∿
+              </button>
+              <button
                 className="tag-btn"
                 onClick={() => toggleBrickInMix(mix.id, l.brickId)}
                 title="Remove from mix"
@@ -183,6 +197,16 @@ export function MixPanel() {
                 ✕
               </button>
             </div>
+
+            {expanded === l.brickId && (
+              <AutomationEditor
+                points={l.automation ?? []}
+                color={brick!.color}
+                onChange={(pts) =>
+                  updateLayer(mix.id, l.brickId, { automation: pts })
+                }
+              />
+            )}
           </div>
         ))}
       </div>
