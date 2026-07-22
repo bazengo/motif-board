@@ -1,5 +1,5 @@
 import type { Brick, Mix, MixLayer, Note, TimelineSection } from '../../types';
-import { DEFAULT_DISPLAY } from '../../types';
+import { DEFAULT_DISPLAY, DEFAULT_ENVELOPE } from '../../types';
 
 let n = 0;
 const uid = (p: string) => `${p}${++n}`;
@@ -34,6 +34,7 @@ export function testBrick(partial: Partial<Brick> = {}): Brick {
     parentId: null,
     display: { ...DEFAULT_DISPLAY },
     percussion: false,
+    envelope: { ...DEFAULT_ENVELOPE },
     ...partial,
   };
 }

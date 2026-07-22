@@ -5,6 +5,7 @@ import { exportBrick } from '../lib/midi';
 import { PianoRoll } from './PianoRoll';
 import { RecordBar } from './RecordBar';
 import { InfoTip } from './InfoTip';
+import { EnvelopeEditor } from './EnvelopeEditor';
 import { useRecorder } from '../useRecorder';
 import {
   NOTE_NAMES,
@@ -25,7 +26,7 @@ export function BrickEditor() {
   const setEditorLoop = useStore((s) => s.setEditorLoop);
   const closeEditor = useStore((s) => s.closeEditor);
 
-  const [tab, setTab] = useState<'details' | 'theory'>('details');
+  const [tab, setTab] = useState<'details' | 'theory' | 'sound'>('details');
   const [audition, setAudition] = useState(true);
   const [transposeKey, setTransposeKey] = useState(false);
   const [chordSym, setChordSym] = useState('Am');
@@ -103,17 +104,23 @@ export function BrickEditor() {
           />
 
           <label className="fld">
-            Key
-            <select value={root} onChange={(e) => setKey(e.target.value, scaleType)}>
-              {NOTE_NAMES.map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-            <select value={scaleType} onChange={(e) => setKey(root, e.target.value)}>
-              {SCALE_TYPES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
+            {brick.percussion ? 'Kit' : 'Key'}
+            {brick.percussion ? (
+              <span className="fld-static">🥁 GM drums</span>
+            ) : (
+              <>
+                <select value={root} onChange={(e) => setKey(e.target.value, scaleType)}>
+                  {NOTE_NAMES.map((n) => (
+                    <option key={n}>{n}</option>
+                  ))}
+                </select>
+                <select value={scaleType} onChange={(e) => setKey(root, e.target.value)}>
+                  {SCALE_TYPES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </>
+            )}
           </label>
 
           <label
@@ -279,7 +286,63 @@ export function BrickEditor() {
               >
                 Theory
               </button>
+              <button
+                className={tab === 'sound' ? 'on' : ''}
+                onClick={() => setTab('sound')}
+              >
+                Sound
+              </button>
             </div>
+
+            {tab === 'sound' && (
+              <div className="side-content">
+                <label className="side-label">Instrument</label>
+                <select
+                  className="sound-select"
+                  value={brick.instrument}
+                  disabled={brick.percussion}
+                  onChange={(e) =>
+                    updateBrick(brick.id, { instrument: e.target.value as never })
+                  }
+                >
+                  {INSTRUMENTS.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.label}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="side-label">
+                  Envelope
+                  <InfoTip label="Envelope help">
+                    How each note swells and fades. <strong>Attack</strong> is
+                    how long it takes to reach full volume,{' '}
+                    <strong>decay</strong> how quickly it falls back to the{' '}
+                    <strong>sustain</strong> level it holds while the note is
+                    down, and <strong>release</strong> how long it rings after
+                    it ends. Drag the dots. Changes are audible immediately,
+                    even mid-playback.
+                  </InfoTip>
+                </label>
+
+                {brick.percussion ? (
+                  <p className="side-hint">
+                    Percussion bricks use the drum kit's own voices, which have
+                    their own built-in shaping.
+                  </p>
+                ) : brick.instrument === 'piano' ? (
+                  <p className="side-hint">
+                    The sampled piano carries its own natural envelope — switch
+                    to a synth voice to shape one.
+                  </p>
+                ) : (
+                  <EnvelopeEditor
+                    value={brick.envelope}
+                    onChange={(env) => updateBrick(brick.id, { envelope: env })}
+                  />
+                )}
+              </div>
+            )}
 
             {tab === 'details' && (
               <div className="side-content">

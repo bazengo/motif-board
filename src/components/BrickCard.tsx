@@ -8,7 +8,7 @@ import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
 import { clientToBoard } from '../lib/boardCoords';
 import { useBrickPlayhead, formatRemaining } from '../useBrickPlayhead';
 import type { Brick, BrickDisplay } from '../types';
-import { STICKY_COLORS } from '../types';
+import { STICKY_COLORS, INSTRUMENTS } from '../types';
 
 export function BrickCard({ brick }: { brick: Brick }) {
   const updateBrick = useStore((s) => s.updateBrick);
@@ -326,7 +326,10 @@ export function BrickCard({ brick }: { brick: Brick }) {
       />
 
       <div className="brick-meta">
-        {brick.key} · {brick.bpm} BPM · {brick.notes.length} notes
+        {brick.percussion
+          ? '🥁 Drums'
+          : `${brick.key} · ${INSTRUMENTS.find((i) => i.id === brick.instrument)?.label ?? brick.instrument}`}{' '}
+        · {brick.bpm} BPM · {brick.notes.length} notes
         {brick.parentId && <span className="brick-branch" title="Iteration"> · 🌱</span>}
         {playhead && (
           <span className="brick-timecode" title="Time left in this pass">

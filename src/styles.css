@@ -1214,6 +1214,48 @@
   font-size: 13px;
   resize: vertical;
 }
+/* ---------- Envelope editor ---------- */
+.env-editor {
+  margin-bottom: 8px;
+}
+.env-svg {
+  display: block;
+  border: 1px solid #2c313d;
+  border-radius: 6px;
+  max-width: 100%;
+  user-select: none;
+}
+.env-handle {
+  fill: #ffd166;
+  stroke: #23252b;
+  stroke-width: 1.5;
+  cursor: grab;
+}
+.env-handle:hover {
+  fill: #fff;
+}
+.env-readout {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #9aa3b2;
+  font-variant-numeric: tabular-nums;
+}
+.sound-select {
+  width: 100%;
+  background: #12151b;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.fld-static {
+  font-size: 13px;
+  color: #e6e9ef;
+  padding: 5px 0;
+}
 .scale-notes {
   display: flex;
   flex-wrap: wrap;

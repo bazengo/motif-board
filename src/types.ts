@@ -59,6 +59,21 @@ export interface PhraseTemplate {
   notes: { dp: number; start: number; duration: number; velocity: number }[];
 }
 
+/** ADSR shape for a brick's synth voice (seconds, except sustain = level 0..1). */
+export interface Envelope {
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+export const DEFAULT_ENVELOPE: Envelope = {
+  attack: 0.01,
+  decay: 0.2,
+  sustain: 0.3,
+  release: 0.6,
+};
+
 export interface Brick {
   id: string;
   name: string;
@@ -78,6 +93,8 @@ export interface Brick {
   display: BrickDisplay;
   /** Drum brick: roll rows are GM drum sounds and MIDI goes out on channel 10. */
   percussion: boolean;
+  /** Amplitude envelope for the synth voices (ignored by piano/drums). */
+  envelope: Envelope;
 }
 
 export const TIME_SIGNATURES: { num: number; den: number }[] = [

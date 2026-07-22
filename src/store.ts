@@ -13,6 +13,7 @@ import {
   STICKY_COLORS,
   MIX_COLORS,
   DEFAULT_DISPLAY,
+  DEFAULT_ENVELOPE,
 } from './types';
 
 let colorCursor = 0;
@@ -46,6 +47,7 @@ export function makeBrick(partial: Partial<Brick> = {}): Brick {
     parentId: null,
     display: { ...DEFAULT_DISPLAY },
     percussion: false,
+    envelope: { ...DEFAULT_ENVELOPE },
     ...partial,
   };
 }
@@ -656,7 +658,7 @@ export const useStore = create<AppState>()(
       name: 'music-composition-suite',
       // NOTE: bump this whenever a backfill is added below, or existing saves
       // never receive it (that shipped mixes with an undefined tempo).
-      version: 6,
+      version: 7,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {
@@ -676,6 +678,7 @@ export const useStore = create<AppState>()(
           display: b.display ?? { ...DEFAULT_DISPLAY },
           timeSig: b.timeSig ?? { num: 4, den: 4 },
           percussion: b.percussion ?? false,
+          envelope: b.envelope ?? { ...DEFAULT_ENVELOPE },
         }));
         // backfill mix fields added over time
         if (state.mixes) {

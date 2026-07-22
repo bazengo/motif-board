@@ -228,7 +228,7 @@ export function PianoRoll({
       const newPrimaryPitch = pitchOfRow(rowOfPitch(primary.pitch) + deltaRow);
       if (audition && newPrimaryPitch !== d.lastPreview) {
         d.lastPreview = newPrimaryPitch;
-        engine.preview(newPrimaryPitch, brick.instrument, 0.8, brick.percussion);
+        engine.preview(newPrimaryPitch, brick.instrument, 0.8, brick.percussion, brick.envelope);
       }
     }
 
@@ -240,7 +240,8 @@ export function PianoRoll({
       // never change pitch and so never trigger the in-flight preview)
       if (d && d.type === 'move' && d.moved && audition && brick) {
         const n = brick.notes.find((x) => x.id === d.primaryId);
-        if (n) engine.preview(n.pitch, brick.instrument, 0.8, brick.percussion);
+        if (n)
+          engine.preview(n.pitch, brick.instrument, 0.8, brick.percussion, brick.envelope);
       }
 
       if (d && d.type === 'bg' && brick) {
@@ -293,7 +294,7 @@ export function PianoRoll({
               });
             }
             if (audition)
-              engine.preview(anchorPitch, brick.instrument, 0.8, brick.percussion);
+              engine.preview(anchorPitch, brick.instrument, 0.8, brick.percussion, brick.envelope);
             setSelected(new Set());
           }
         }
@@ -344,7 +345,8 @@ export function PianoRoll({
     }
 
     // clicking a note replays it, not just dragging it
-    if (audition) engine.preview(n.pitch, brick!.instrument, 0.8, brick!.percussion);
+    if (audition)
+      engine.preview(n.pitch, brick!.instrument, 0.8, brick!.percussion, brick!.envelope);
 
     if (e.shiftKey) {
       setSelected((prev) => {

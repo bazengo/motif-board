@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { Note as TonalNote } from 'tonal';
-import type { Brick, InstrumentId, Mix } from '../types';
+import type { Brick, InstrumentId, Mix, Envelope } from '../types';
+import { DEFAULT_ENVELOPE } from '../types';
 import { layerLevels } from '../lib/mix';
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
@@ -40,10 +41,15 @@ const START_DELAY = 0.2; // seconds
 
 /** Percussion bricks always use the drum kit, whatever instrument is set. */
 function makeVoiceFor(brick: Brick): Voiceable {
-  return brick.percussion ? new DrumKit() : makeSynth(brick.instrument);
+  return brick.percussion
+    ? new DrumKit()
+    : makeSynth(brick.instrument, brick.envelope);
 }
 
-function makeSynth(instrument: InstrumentId): Tone.PolySynth | Tone.Sampler {
+function makeSynth(
+  instrument: InstrumentId,
+  env: Envelope = DEFAULT_ENVELOPE
+): Tone.PolySynth | Tone.Sampler {
   switch (instrument) {
     case 'piano':
       return new Tone.Sampler({
@@ -61,13 +67,13 @@ function makeSynth(instrument: InstrumentId): Tone.PolySynth | Tone.Sampler {
         release: 1,
       });
     case 'fm':
-      return new Tone.PolySynth(Tone.FMSynth);
+      return new Tone.PolySynth(Tone.FMSynth, { envelope: { ...env } });
     case 'am':
-      return new Tone.PolySynth(Tone.AMSynth);
+      return new Tone.PolySynth(Tone.AMSynth, { envelope: { ...env } });
     default:
       return new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: instrument },
-        envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.6 },
+        envelope: { ...env },
       });
   }
 }
@@ -90,9 +96,14 @@ function buildEvents(brick: Brick, secPerBeat: number): NoteEvent[] {
   }));
 }
 
+function envSignature(brick: Brick): string {
+  const e = brick.envelope ?? DEFAULT_ENVELOPE;
+  return `${brick.instrument}:${e.attack},${e.decay},${e.sustain},${e.release}`;
+}
+
 function brickSignature(brick: Brick): string {
   return (
-    brick.instrument +
+    envSignature(brick) +
     '|' +
     brick.lengthBeats +
     '|' +
@@ -109,6 +120,7 @@ interface Voice {
   part: Tone.Part<NoteEvent>;
   channel: number;
   instrument: InstrumentId;
+  envSig: string;
   loop: boolean;
   lengthBeats: number;
   level: number; // current effective gain (0 = muted/not soloed)
@@ -130,7 +142,7 @@ class AudioEngine {
   private endTimer: number | null = null;
   private currentBpm = 120;
   private usedChannels = new Set<number>();
-  private previewSynths = new Map<InstrumentId, Voiceable>();
+  private previewSynths = new Map<string, Voiceable>();
   private activeMixId: string | null = null;
   private clickSynth: Tone.MembraneSynth | null = null;
   /** Bumped on every play/stop so an in-flight play can tell it was superseded. */
@@ -268,6 +280,7 @@ class AudioEngine {
       part: null as unknown as Tone.Part<NoteEvent>,
       channel,
       instrument: brick.instrument,
+      envSig: envSignature(brick),
       loop,
       lengthBeats: brick.lengthBeats,
       level: gain,
@@ -340,6 +353,7 @@ class AudioEngine {
         part: null as unknown as Tone.Part<NoteEvent>,
         channel,
         instrument: brick.instrument,
+        envSig: envSignature(brick),
         loop,
         lengthBeats: brick.lengthBeats,
         level: gain,
@@ -372,9 +386,10 @@ class AudioEngine {
     await this.waitForSamples();
     if (token !== this.playToken) return; // superseded while waiting
 
-    // starting from a selection just means beginning at a later transport
-    // position; parts before it are simply skipped
-    const offset = PART_LEAD + Math.max(0, startBeat) * secPerBeat;
+    // Start at the musical position only — NOT plus PART_LEAD. Parts already
+    // sit PART_LEAD ahead, so adding it here would drop the transport exactly
+    // on the first events and the scheduler would miss them.
+    const offset = Math.max(0, startBeat) * secPerBeat;
     transport.position = 0;
     transport.start(`+${START_DELAY}`, offset);
     this.emit(true);
@@ -442,6 +457,7 @@ class AudioEngine {
         part: null as unknown as Tone.Part<NoteEvent>,
         channel,
         instrument: brick.instrument,
+        envSig: envSignature(brick),
         loop: false,
         lengthBeats: brick.lengthBeats,
         level: 1,
@@ -474,13 +490,15 @@ class AudioEngine {
     transport.position = 0;
     if (loop) {
       transport.loop = true;
-      transport.loopStart = PART_LEAD;
+      // loop back to 0, not to PART_LEAD — landing on the events again would
+      // drop the first note of every pass
+      transport.loopStart = 0;
       transport.loopEnd = PART_LEAD + totalSeconds;
     } else {
       transport.loop = false;
     }
     this.paused = false;
-    transport.start(`+${START_DELAY}`, PART_LEAD + Math.max(0, startSec));
+    transport.start(`+${START_DELAY}`, Math.max(0, startSec));
     this.emit(true);
 
     if (!loop) {
@@ -504,11 +522,15 @@ class AudioEngine {
       if (sig === voice.sig) continue;
       voice.sig = sig;
 
-      if (brick.instrument !== voice.instrument && voice.synth && voice.volume) {
+      // rebuild the voice when the instrument OR its envelope changes, so
+      // envelope tweaks are audible without restarting playback
+      const nextEnvSig = envSignature(brick);
+      if (nextEnvSig !== voice.envSig && voice.synth && voice.volume) {
         const next = makeVoiceFor(brick).connect(voice.volume);
         voice.synth.dispose();
         voice.synth = next;
         voice.instrument = brick.instrument;
+        voice.envSig = nextEnvSig;
       }
 
       if (brick.lengthBeats !== voice.lengthBeats) {
@@ -608,15 +630,20 @@ class AudioEngine {
     pitch: number,
     instrument: InstrumentId,
     gain = 0.8,
-    percussion = false
+    percussion = false,
+    env: Envelope = DEFAULT_ENVELOPE
   ) {
     await this.ensureStarted();
-    // percussion auditions through the drum kit, keyed separately from synths
-    const key = (percussion ? 'drums' : instrument) as InstrumentId;
+    // cache per instrument *and* envelope, so auditions match playback
+    const key = percussion
+      ? 'drums'
+      : `${instrument}:${env.attack},${env.decay},${env.sustain},${env.release}`;
     let synth = this.previewSynths.get(key);
     if (!synth) {
       const vol = new Tone.Volume(gainToDb(gain)).toDestination();
-      synth = (percussion ? new DrumKit() : makeSynth(instrument)).connect(vol);
+      synth = (percussion ? new DrumKit() : makeSynth(instrument, env)).connect(
+        vol
+      );
       this.previewSynths.set(key, synth);
     }
     if (synth instanceof DrumKit) synth.triggerAttackRelease(pitch, 0.3);

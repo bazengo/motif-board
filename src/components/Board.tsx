@@ -4,11 +4,14 @@ import { BrickCard } from './BrickCard';
 import { MixNode } from './MixNode';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
 import { clientToBoard } from '../lib/boardCoords';
+import { tagsForBrick, tagsForMix, matchesTags } from '../lib/tags';
+import type { Brick, Mix } from '../types';
 
 export function Board() {
   const bricks = useStore((s) => s.bricks);
   const mixes = useStore((s) => s.mixes);
   const linking = useStore((s) => s.linking);
+  const activeTags = useStore((s) => s.activeTags);
   const addBrick = useStore((s) => s.addBrick);
   const openEditor = useStore((s) => s.openEditor);
   const zoom = useStore((s) => s.zoom);
@@ -42,6 +45,14 @@ export function Board() {
   }, []);
 
   const byId = new Map(bricks.map((b) => [b.id, b]));
+  // an edge is only "in view" when both of its endpoints match the tag filter,
+  // otherwise it hangs about at full strength over dimmed cards
+  const filtering = activeTags.length > 0;
+  const brickMatches = (b: Brick) =>
+    !filtering || matchesTags(tagsForBrick(b, mixes), activeTags);
+  const mixMatches = (m: Mix) =>
+    !filtering || matchesTags(tagsForMix(m), activeTags);
+  const edgeOpacity = (on: boolean) => (filtering && !on ? 0.12 : 1);
   // the live drag line starts at a brick card, or a mix node when dragging a
   // mix down to the timeline
   const linkFrom = (() => {
@@ -242,7 +253,9 @@ export function Board() {
                 fill="none"
                 stroke={mix.color}
                 strokeWidth={2}
-                opacity={0.75}
+                opacity={
+                  0.75 * edgeOpacity(brickMatches(brick) && mixMatches(mix))
+                }
               />
             );
           })}
@@ -260,6 +273,7 @@ export function Board() {
                 stroke="rgba(255,209,102,0.55)"
                 strokeWidth={2}
                 strokeDasharray="4 3"
+                opacity={edgeOpacity(brickMatches(parent) && brickMatches(child))}
               />
             );
           })}
