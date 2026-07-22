@@ -28,6 +28,8 @@ export function TimelineStrip() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [dragOut, setDragOut] = useState(false);
+  const editorOpen = useStore((s) => s.editorOpen);
   const laneRef = useRef<HTMLDivElement | null>(null);
   const linking = useStore((s) => s.linking);
 
@@ -46,6 +48,22 @@ export function TimelineStrip() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing]);
+
+  // Delete removes the selected section — but only when a block was actually
+  // clicked, and never while the editor has the keyboard (Delete edits notes).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (editorOpen || !selectedId) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      removeSection(selectedId);
+      setSelectedId(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editorOpen, selectedId, removeSection]);
 
   const plan = buildTimelinePlan(timeline, mixes, bricks, globalBpm);
   const totalWidth = Math.max(320, plan.totalSeconds * pxPerSec);
@@ -105,22 +123,34 @@ export function TimelineStrip() {
       return idx;
     };
 
+    const overBoard = (ev: PointerEvent) =>
+      !!document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.board');
+
     const move = (ev: PointerEvent) => {
       if (!dragging && Math.abs(ev.clientX - startX) > 4) {
         dragging = true;
         setDragId(section.id);
       }
-      if (dragging) setDropIndex(indexAt(ev.clientX));
+      if (!dragging) return;
+      // dragging up onto the corkboard removes the section
+      setDragOut(overBoard(ev));
+      setDropIndex(indexAt(ev.clientX));
     };
     const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       if (dragging) {
-        const to = indexAt(ev.clientX);
-        if (to !== i) moveSection(section.id, to);
+        if (overBoard(ev)) {
+          removeSection(section.id);
+          if (selectedId === section.id) setSelectedId(null);
+        } else {
+          const to = indexAt(ev.clientX);
+          if (to !== i) moveSection(section.id, to);
+        }
       }
       setDragId(null);
       setDropIndex(null);
+      setDragOut(false);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -230,7 +260,11 @@ export function TimelineStrip() {
                         'tl-block' +
                         (activeIndex === i ? ' active' : '') +
                         (selected?.id === section.id ? ' selected' : '') +
-                        (dragId === section.id ? ' dragging' : '') +
+                        (dragId === section.id
+                          ? dragOut
+                            ? ' drag-remove'
+                            : ' dragging'
+                          : '') +
                         (dragId && dropIndex === i && dragId !== section.id
                           ? ' drop-here'
                           : '')

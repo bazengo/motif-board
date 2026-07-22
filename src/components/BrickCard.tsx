@@ -87,17 +87,27 @@ export function BrickCard({ brick }: { brick: Brick }) {
       const st = useStore.getState();
 
       if (kind === 'mix') {
-        for (const m of st.mixes) {
-          if (
+        const hit = st.mixes.find(
+          (m) =>
             p.x >= m.board.x &&
             p.x <= m.board.x + MIX_W &&
             p.y >= m.board.y &&
             p.y <= m.board.y + MIX_H
-          ) {
-            // dropping on a mix toggles: joins it, or detaches if already a member
-            st.toggleBrickInMix(m.id, brick.id);
-            break;
-          }
+        );
+        if (hit) {
+          // dropping on a mix toggles: joins it, or detaches if already a member
+          st.toggleBrickInMix(hit.id, brick.id);
+        } else if (
+          document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.board')
+        ) {
+          // dropped on empty board: spin up a new mix here holding this brick
+          const id = st.addMix({
+            board: {
+              x: Math.max(0, p.x - MIX_W / 2),
+              y: Math.max(0, p.y - 16),
+            },
+          });
+          st.toggleBrickInMix(id, brick.id);
         }
       } else {
         // dropped on another brick? adopt it as a child (cycle-guarded by
@@ -165,7 +175,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
         <div className="brick-handle-actions">
           <button
             className="icon-btn link-handle"
-            title="Drag onto a mix node to add this brick — or drop it on a mix it's already in to detach"
+            title="Drag onto a mix to add this brick (or off it to detach) — drop on empty board to start a new mix"
             onPointerDown={(e) => startLink(e, 'mix')}
           >
             ⇢

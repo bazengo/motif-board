@@ -314,6 +314,8 @@
   background: #12151b;
   border: 1px solid #2c313d;
   border-radius: 6px;
+  /* dragging blocks shouldn't smear a text selection across their titles */
+  user-select: none;
 }
 .tl-empty {
   position: absolute;
@@ -346,6 +348,11 @@
 }
 .tl-block.dragging {
   opacity: 0.45;
+}
+/* dragged up onto the corkboard: releasing here removes the section */
+.tl-block.drag-remove {
+  opacity: 0.3;
+  box-shadow: inset 0 0 0 2px #ff8a8a;
 }
 .tl-block.drop-here {
   box-shadow: inset 0 0 0 2px #ffd166;
