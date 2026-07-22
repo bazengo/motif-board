@@ -29,7 +29,14 @@ type Voiceable = Tone.PolySynth | Tone.Sampler | DrumKit;
  * where Tone's scheduler can miss it — that was dropping the first note of a
  * one-shot brick (looping mixes only hid it, since the note returned next pass).
  */
-const PART_LEAD = 0.05; // seconds
+const PART_LEAD = 0.08; // seconds
+
+/**
+ * How far ahead the transport is started. Building a mix's synths costs real
+ * time, and under load a thin margin lets position 0 slip past the scheduler —
+ * which showed up as an intermittently missing first note.
+ */
+const START_DELAY = 0.2; // seconds
 
 /** Percussion bricks always use the drum kit, whatever instrument is set. */
 function makeVoiceFor(brick: Brick): Voiceable {
@@ -126,6 +133,21 @@ class AudioEngine {
   private previewSynths = new Map<InstrumentId, Voiceable>();
   private activeMixId: string | null = null;
   private clickSynth: Tone.MembraneSynth | null = null;
+  /** Bumped on every play/stop so an in-flight play can tell it was superseded. */
+  private playToken = 0;
+
+  /** Wait for sampled instruments to finish loading, so their first notes
+   *  aren't silently dropped. Bounded, so a failed load can't hang playback. */
+  private async waitForSamples() {
+    try {
+      await Promise.race([
+        Tone.loaded(),
+        new Promise((r) => setTimeout(r, 2000)),
+      ]);
+    } catch {
+      /* a buffer failed to load — start anyway rather than never play */
+    }
+  }
 
   monitorInternal = true;
 
@@ -189,12 +211,15 @@ class AudioEngine {
     await this.ensureStarted();
     this.stop();
     if (items.length === 0) return;
+    const token = ++this.playToken;
     this.activeMixId = mixId ?? null;
 
     // never let a bad tempo reach the transport — NaN there stops everything
     const safeBpm = Number.isFinite(bpm) && bpm > 0 ? bpm : 120;
     const transport = Tone.getTransport();
     transport.bpm.value = safeBpm;
+    // rewind before building parts so nothing re-evaluates against a stale position
+    transport.position = 0;
     this.currentBpm = safeBpm;
     const secPerBeat = 60 / safeBpm;
     const midiActive = !!getSelectedOutput();
@@ -250,10 +275,13 @@ class AudioEngine {
       index++;
     }
 
+    // Sampled instruments must be ready before the transport moves, or their
+    // opening notes are dropped. Building several synths for a mix also takes
+    // real time, so the transport lead is only reserved *after* that work.
+    await this.waitForSamples();
+    if (token !== this.playToken) return; // superseded while waiting
+
     transport.position = 0;
-    // Start slightly ahead so the scheduler catches events at time 0 — without
-    // this, the very first note is missed until the loop comes back around.
-    const START_DELAY = 0.1;
     transport.start(`+${START_DELAY}`);
     this.emit(true);
 
@@ -277,6 +305,7 @@ class AudioEngine {
     await this.ensureStarted();
     this.stop();
     if (notes.length === 0) return;
+    const token = ++this.playToken;
 
     const transport = Tone.getTransport();
     transport.bpm.value = 120; // irrelevant: all times are absolute seconds
@@ -339,12 +368,15 @@ class AudioEngine {
       index++;
     }
 
+    await this.waitForSamples();
+    if (token !== this.playToken) return; // superseded while waiting
+
     transport.position = 0;
-    transport.start('+0.1');
+    transport.start(`+${START_DELAY}`);
     this.emit(true);
     this.endTimer = window.setTimeout(
       () => this.stop(),
-      (totalSeconds + PART_LEAD + 0.6) * 1000
+      (totalSeconds + PART_LEAD + START_DELAY + 0.6) * 1000
     );
   }
 
@@ -456,6 +488,7 @@ class AudioEngine {
   }
 
   stop() {
+    this.playToken++; // cancel any play still waiting on samples
     if (this.endTimer !== null) {
       clearTimeout(this.endTimer);
       this.endTimer = null;
