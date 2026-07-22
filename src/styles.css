@@ -1023,6 +1023,19 @@
   flex-shrink: 0;
 }
 
+.roll-editbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.sel-count {
+  font-size: 11px;
+  color: #ffd166;
+  white-space: nowrap;
+}
+
 /* ---------- Phrase brush bar ---------- */
 .roll-brushbar {
   display: flex;

@@ -11,11 +11,21 @@ const PITCH_HIGH = 96; // C7
 const PITCH_LOW = 36; // C2
 const ROW_H = 16;
 const BEAT_W = 44;
-const STEPS_PER_BEAT = 4;
-const STEP_W = BEAT_W / STEPS_PER_BEAT;
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const LANE_H = 60;
+
+/** Editing grids, in quarter-note beats. */
+export const GRID_OPTIONS: { label: string; beats: number }[] = [
+  { label: '1/4', beats: 1 },
+  { label: '1/8', beats: 0.5 },
+  { label: '1/16', beats: 0.25 },
+  { label: '1/32', beats: 0.125 },
+  { label: '1/4 triplet', beats: 2 / 3 },
+  { label: '1/8 triplet', beats: 1 / 3 },
+  { label: '1/16 triplet', beats: 1 / 6 },
+  { label: '1/8 dotted', beats: 0.75 },
+];
 
 /** Melodic rows are a contiguous chromatic range, high pitch first. */
 const MELODIC_PITCHES: number[] = Array.from(
@@ -23,8 +33,8 @@ const MELODIC_PITCHES: number[] = Array.from(
   (_, i) => PITCH_HIGH - i
 );
 
-function snapBeat(raw: number): number {
-  return Math.round(raw * STEPS_PER_BEAT) / STEPS_PER_BEAT;
+function snapTo(raw: number, grid: number): number {
+  return Math.round(raw / grid) * grid;
 }
 
 type Orig = { start: number; pitch: number; duration: number };
@@ -74,6 +84,12 @@ export function PianoRoll({
   const setSnapToScale = useStore((s) => s.setSnapToScale);
   const showNoteNames = useStore((s) => s.showNoteNames);
   const setShowNoteNames = useStore((s) => s.setShowNoteNames);
+  const grid = useStore((s) => s.grid);
+  const setGrid = useStore((s) => s.setGrid);
+  const clipboardSize = useStore((s) => s.clipboard.length);
+  const copyNotes = useStore((s) => s.copyNotes);
+  const pasteNotes = useStore((s) => s.pasteNotes);
+  const quantize = useStore((s) => s.quantize);
   const activeTemplate = templates.find((t) => t.id === activeBrush) ?? null;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -170,7 +186,7 @@ export function PianoRoll({
 
       if (d.type === 'resize') {
         const o = d.origs.get(d.primaryId)!;
-        const newDur = Math.max(1 / STEPS_PER_BEAT, snapBeat(c.beat - o.start));
+        const newDur = Math.max(grid, snapTo(c.beat - o.start, grid));
         updateNote(brick.id, d.primaryId, { duration: newDur });
         setLastDur(newDur);
         return;
@@ -180,7 +196,7 @@ export function PianoRoll({
       const primary = d.origs.get(d.primaryId)!;
       const snappedPrimaryStart = Math.max(
         0,
-        snapBeat(primary.start + (c.beat - d.downBeat))
+        snapTo(primary.start + (c.beat - d.downBeat), grid)
       );
       let deltaBeat = snappedPrimaryStart - primary.start;
       const origVals = [...d.origs.values()];
@@ -279,7 +295,7 @@ export function PianoRoll({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [brick, updateNote, updateNotesBatch, addNote, audition, lastDur]);
+  }, [brick, updateNote, updateNotesBatch, addNote, audition, lastDur, grid]);
 
   if (!brick) return null;
 
@@ -290,7 +306,7 @@ export function PianoRoll({
       type: 'bg',
       x0: c.x,
       y0: c.y,
-      startBeat: snapBeat(c.beat),
+      startBeat: snapTo(c.beat, grid),
       startRow: c.row,
       additive: e.shiftKey,
       moved: false,
@@ -347,10 +363,34 @@ export function PianoRoll({
     };
   }
 
+  function doCopy(cut = false) {
+    if (!selected.size) return;
+    copyNotes(brick!.id, [...selected], cut);
+    if (cut) setSelected(new Set());
+  }
+
+  function doPaste() {
+    const ids = pasteNotes(brick!.id);
+    if (ids.length) setSelected(new Set(ids)); // select the paste so it can be dragged
+  }
+
   function onKeyDown(e: React.KeyboardEvent) {
+    const mod = e.ctrlKey || e.metaKey;
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected.size) {
       removeNotes(brick!.id, [...selected]);
       setSelected(new Set());
+      e.preventDefault();
+    } else if (mod && e.key.toLowerCase() === 'c') {
+      doCopy(false);
+      e.preventDefault();
+    } else if (mod && e.key.toLowerCase() === 'x') {
+      doCopy(true);
+      e.preventDefault();
+    } else if (mod && e.key.toLowerCase() === 'v') {
+      doPaste();
+      e.preventDefault();
+    } else if (mod && e.key.toLowerCase() === 'a') {
+      setSelected(new Set(brick!.notes.map((n) => n.id)));
       e.preventDefault();
     }
   }
@@ -408,8 +448,9 @@ export function PianoRoll({
 
   const beatLines = [];
   for (let b = 0; b <= brick.lengthBeats; b++) beatLines.push(b);
-  const stepLines = [];
-  for (let s = 0; s <= brick.lengthBeats * STEPS_PER_BEAT; s++) stepLines.push(s);
+  // faint sub-divisions follow the chosen grid (so triplets look like triplets)
+  const stepLines: number[] = [];
+  for (let b = 0; b <= brick.lengthBeats + 1e-9; b += grid) stepLines.push(b);
 
   // bar lines from the time signature (in quarter-note beats; may be fractional)
   const ts = brick.timeSig ?? { num: 4, den: 4 };
@@ -421,6 +462,59 @@ export function PianoRoll({
 
   return (
     <div className="roll-with-vel">
+    <div className="roll-editbar">
+      <label className="brush-field">
+        Grid
+        <select
+          value={grid}
+          onChange={(e) => setGrid(Number(e.target.value))}
+        >
+          {GRID_OPTIONS.map((g) => (
+            <option key={g.label} value={g.beats}>
+              {g.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="ghost-btn brush-btn"
+        disabled={selected.size === 0}
+        onClick={() => quantize(brick.id, [...selected], grid)}
+        title="Snap selected notes to the grid"
+      >
+        ⌗ Quantize selection
+      </button>
+      <button
+        className="ghost-btn brush-btn"
+        disabled={brick.notes.length === 0}
+        onClick={() => quantize(brick.id, null, grid)}
+        title="Snap every note in this brick to the grid"
+      >
+        ⌗ Whole card
+      </button>
+
+      <span className="brush-spacer" />
+
+      {selected.size > 0 && (
+        <>
+          <span className="sel-count">{selected.size} selected</span>
+          <button className="ghost-btn brush-btn" onClick={() => doCopy(false)} title="Copy (Ctrl+C)">
+            ⧉ Copy
+          </button>
+          <button className="ghost-btn brush-btn" onClick={() => doCopy(true)} title="Cut (Ctrl+X)">
+            ✂ Cut
+          </button>
+        </>
+      )}
+      <button
+        className="ghost-btn brush-btn"
+        disabled={clipboardSize === 0}
+        onClick={doPaste}
+        title="Paste (Ctrl+V)"
+      >
+        ⎘ Paste{clipboardSize ? ` (${clipboardSize})` : ''}
+      </button>
+    </div>
     <div className="roll-brushbar">
       <label className="brush-field">
         Brush
@@ -555,15 +649,15 @@ export function PianoRoll({
                 }
               />
             ))}
-            {stepLines.map((s) => (
+            {stepLines.map((b, i) => (
               <line
-                key={'s' + s}
-                x1={s * STEP_W}
+                key={'s' + i}
+                x1={b * BEAT_W}
                 y1={0}
-                x2={s * STEP_W}
+                x2={b * BEAT_W}
                 y2={height}
                 stroke="#1f232b"
-                strokeWidth={s % STEPS_PER_BEAT === 0 ? 0 : 1}
+                strokeWidth={Math.abs(b - Math.round(b)) < 1e-9 ? 0 : 1}
               />
             ))}
             {beatLines.map((b) => (

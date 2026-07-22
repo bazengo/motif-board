@@ -49,6 +49,9 @@ export function makeBrick(partial: Partial<Brick> = {}): Brick {
   };
 }
 
+/** Where the clipboard's contents were lifted from, so paste lands in place. */
+let pasteAnchor = { pitch: 60, start: 0 };
+
 let mixColorCursor = 0;
 export function makeMix(partial: Partial<Mix> = {}): Mix {
   const color = MIX_COLORS[mixColorCursor % MIX_COLORS.length];
@@ -164,6 +167,11 @@ interface AppState {
   activeBrush: string | null; // template id, or null = single note
   snapToScale: boolean; // remap stamped phrases into the brick's key
   showNoteNames: boolean; // draw note/drum names on the note blocks
+  /** Editing grid in beats (0.25 = 1/16, 1/6 = 1/16 triplet, ...). Drives both
+   *  drawing snap and quantize. */
+  grid: number;
+  /** Copied notes, stored relative to the earliest one. */
+  clipboard: { dp: number; start: number; duration: number; velocity: number }[];
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -225,6 +233,10 @@ interface AppState {
   setActiveBrush: (id: string | null) => void;
   setSnapToScale: (v: boolean) => void;
   setShowNoteNames: (v: boolean) => void;
+  setGrid: (v: number) => void;
+  copyNotes: (brickId: string, noteIds: string[], cut?: boolean) => void;
+  pasteNotes: (brickId: string) => string[];
+  quantize: (brickId: string, noteIds: string[] | null, grid: number) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -242,6 +254,8 @@ export const useStore = create<AppState>()(
       activeBrush: null,
       snapToScale: false,
       showNoteNames: false,
+      grid: 0.25,
+      clipboard: [],
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -549,6 +563,69 @@ export const useStore = create<AppState>()(
       setActiveBrush: (id) => set({ activeBrush: id }),
       setSnapToScale: (v) => set({ snapToScale: v }),
       setShowNoteNames: (v) => set({ showNoteNames: v }),
+      setGrid: (v) => set({ grid: v }),
+
+      copyNotes: (brickId, noteIds, cut = false) => {
+        const s = useStore.getState();
+        const brick = s.bricks.find((b) => b.id === brickId);
+        if (!brick) return;
+        const picked = brick.notes.filter((n) => noteIds.includes(n.id));
+        if (picked.length === 0) return;
+        const minStart = Math.min(...picked.map((n) => n.start));
+        const anchor = picked.reduce((a, b) =>
+          b.start < a.start || (b.start === a.start && b.pitch < a.pitch) ? b : a
+        );
+        set({
+          clipboard: picked.map((n) => ({
+            dp: n.pitch - anchor.pitch,
+            start: n.start - minStart,
+            duration: n.duration,
+            velocity: n.velocity,
+          })),
+        });
+        // remember where it came from so paste lands in place
+        pasteAnchor = { pitch: anchor.pitch, start: minStart };
+        if (cut) useStore.getState().removeNotes(brickId, noteIds);
+      },
+
+      pasteNotes: (brickId) => {
+        const s = useStore.getState();
+        if (s.clipboard.length === 0) return [];
+        const ids: string[] = [];
+        const notes = s.clipboard.map((c) => {
+          const id = nanoid(8);
+          ids.push(id);
+          return {
+            id,
+            pitch: Math.max(0, Math.min(127, pasteAnchor.pitch + c.dp)),
+            start: Math.max(0, pasteAnchor.start + c.start),
+            duration: c.duration,
+            velocity: c.velocity,
+          };
+        });
+        set((st) => ({
+          bricks: st.bricks.map((b) =>
+            b.id === brickId ? { ...b, notes: [...b.notes, ...notes] } : b
+          ),
+        }));
+        return ids;
+      },
+
+      quantize: (brickId, noteIds, grid) =>
+        set((s) => ({
+          bricks: s.bricks.map((b) => {
+            if (b.id !== brickId) return b;
+            const target = noteIds ? new Set(noteIds) : null;
+            return {
+              ...b,
+              notes: b.notes.map((n) =>
+                !target || target.has(n.id)
+                  ? { ...n, start: Math.max(0, Math.round(n.start / grid) * grid) }
+                  : n
+              ),
+            };
+          }),
+        })),
     }),
     {
       name: 'music-composition-suite',
@@ -611,6 +688,7 @@ export const useStore = create<AppState>()(
         activeBrush: s.activeBrush,
         snapToScale: s.snapToScale,
         showNoteNames: s.showNoteNames,
+        grid: s.grid,
         timeline: s.timeline,
       }),
     }
