@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import { descendantIds, familyIds } from './lib/lineage';
+import { bricksInGroup } from './lib/groups';
 import {
   type Brick,
   type Mix,
@@ -9,6 +10,7 @@ import {
   type Note,
   type PhraseTemplate,
   type TimelineSection,
+  type Group,
   type InstrumentId,
   STICKY_COLORS,
   MIX_COLORS,
@@ -119,6 +121,7 @@ interface AppState {
     kind: 'mix' | 'branch' | 'timeline';
   } | null;
   timeline: TimelineSection[];
+  groups: Group[];
   // phrase-template "brush" used when clicking the piano roll
   templates: PhraseTemplate[];
   activeBrush: string | null; // template id, or null = single note
@@ -192,6 +195,13 @@ interface AppState {
     patch: Partial<Omit<TimelineSection, 'id'>>
   ) => void;
 
+  // groups (corkboard regions)
+  addGroup: (partial?: Partial<Group>) => string;
+  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
+  deleteGroup: (id: string) => void;
+  moveGroup: (id: string, x: number, y: number) => void;
+  resizeGroup: (id: string, w: number, h: number) => void;
+
   // phrase templates
   addTemplate: (name: string, notes: PhraseTemplate['notes']) => string;
   renameTemplate: (id: string, name: string) => void;
@@ -227,6 +237,7 @@ export const useStore = create<AppState>()(
       activeMixId: null,
       linking: null,
       timeline: [],
+      groups: [],
       templates: [],
       activeBrush: null,
       snapToScale: false,
@@ -478,6 +489,71 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      addGroup: (partial) => {
+        const s = useStore.getState();
+        const group: Group = {
+          id: nanoid(8),
+          name: `Group ${s.groups.length + 1}`,
+          color: MIX_COLORS[s.groups.length % MIX_COLORS.length],
+          board: { x: 60, y: 60, w: 520, h: 340 },
+          notes: '',
+          ...partial,
+        };
+        set((st) => ({ groups: [...st.groups, group] }));
+        return group.id;
+      },
+
+      updateGroup: (id, patch) =>
+        set((s) => ({
+          groups: s.groups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
+        })),
+
+      deleteGroup: (id) =>
+        set((s) => ({ groups: s.groups.filter((g) => g.id !== id) })),
+
+      /** Moving a frame carries whatever sits inside it. */
+      moveGroup: (id, x, y) => {
+        const s = useStore.getState();
+        const g = s.groups.find((gg) => gg.id === id);
+        if (!g) return;
+        const dx = x - g.board.x;
+        const dy = y - g.board.y;
+        const inside = new Set(bricksInGroup(g, s.bricks).map((b) => b.id));
+        set((st) => ({
+          groups: st.groups.map((gg) =>
+            gg.id === id ? { ...gg, board: { ...gg.board, x, y } } : gg
+          ),
+          bricks: st.bricks.map((b) =>
+            inside.has(b.id)
+              ? {
+                  ...b,
+                  board: {
+                    ...b.board,
+                    x: Math.max(0, b.board.x + dx),
+                    y: Math.max(0, b.board.y + dy),
+                  },
+                }
+              : b
+          ),
+        }));
+      },
+
+      resizeGroup: (id, w, h) =>
+        set((s) => ({
+          groups: s.groups.map((g) =>
+            g.id === id
+              ? {
+                  ...g,
+                  board: {
+                    ...g.board,
+                    w: Math.max(160, w),
+                    h: Math.max(120, h),
+                  },
+                }
+              : g
+          ),
+        })),
+
       setLinking: (v) => set({ linking: v }),
 
       addTimelineSection: (mixId, atIndex) => {
@@ -663,7 +739,7 @@ export const useStore = create<AppState>()(
       name: 'music-composition-suite',
       // NOTE: bump this whenever a backfill is added below, or existing saves
       // never receive it (that shipped mixes with an undefined tempo).
-      version: 7,
+      version: 8,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {
@@ -672,6 +748,7 @@ export const useStore = create<AppState>()(
               mixes?: Mix[];
               activeMixId?: string | null;
               templates?: PhraseTemplate[];
+              groups?: Group[];
               activeBrush?: string | null;
             }
           | undefined;
@@ -712,6 +789,7 @@ export const useStore = create<AppState>()(
           state.templates = state.templates ?? [];
           state.activeBrush = null;
         }
+        state.groups = state.groups ?? [];
         return state as never;
       },
       partialize: (s) => ({
@@ -727,6 +805,7 @@ export const useStore = create<AppState>()(
         editorLoop: s.editorLoop,
         noteLength: s.noteLength,
         timeline: s.timeline,
+        groups: s.groups,
       }),
     }
   )

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { BrickCard } from './BrickCard';
 import { MixNode } from './MixNode';
+import { GroupFrame } from './GroupFrame';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
 import { clientToBoard } from '../lib/boardCoords';
 import { tagsForBrick, tagsForMix, matchesTags } from '../lib/tags';
@@ -12,6 +13,7 @@ export function Board() {
   const mixes = useStore((s) => s.mixes);
   const linking = useStore((s) => s.linking);
   const activeTags = useStore((s) => s.activeTags);
+  const groups = useStore((s) => s.groups);
   const addBrick = useStore((s) => s.addBrick);
   const openEditor = useStore((s) => s.openEditor);
   const zoom = useStore((s) => s.zoom);
@@ -49,7 +51,7 @@ export function Board() {
   // otherwise it hangs about at full strength over dimmed cards
   const filtering = activeTags.length > 0;
   const brickMatches = (b: Brick) =>
-    !filtering || matchesTags(tagsForBrick(b, mixes), activeTags);
+    !filtering || matchesTags(tagsForBrick(b, mixes, groups), activeTags);
   const mixMatches = (m: Mix) =>
     !filtering || matchesTags(tagsForMix(m), activeTags);
   const edgeOpacity = (on: boolean) => (filtering && !on ? 0.12 : 1);
@@ -87,6 +89,10 @@ export function Board() {
   for (const m of mixes) {
     maxX = Math.max(maxX, m.board.x + MIX_W + 120);
     maxY = Math.max(maxY, m.board.y + MIX_H + 120);
+  }
+  for (const g of groups) {
+    maxX = Math.max(maxX, g.board.x + g.board.w + 120);
+    maxY = Math.max(maxY, g.board.y + g.board.h + 120);
   }
   if (linking) {
     maxX = Math.max(maxX, linking.x + 40);
@@ -221,6 +227,10 @@ export function Board() {
           transformOrigin: '0 0',
         }}
       >
+      {groups.map((g) => (
+        <GroupFrame key={g.id} group={g} />
+      ))}
+
       {(lineage.length > 0 || mixEdges.length > 0 || linking) && (
         <svg className="board-links" width={maxX} height={maxY}>
           {linking && linkFrom && (

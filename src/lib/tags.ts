@@ -1,4 +1,5 @@
-import type { Brick, Mix } from '../types';
+import type { Brick, Group, Mix } from '../types';
+import { groupsForBrick } from './groups';
 
 // Tags come from two places:
 //  - #hashtags typed into a brick's process notes or a mix's notes
@@ -8,7 +9,7 @@ export interface Tag {
   id: string; // "#verse" or "mix:<id>"
   label: string;
   color: string;
-  kind: 'text' | 'mix';
+  kind: 'text' | 'mix' | 'group';
 }
 
 const TEXT_TAG_COLOR = '#8ecae6';
@@ -41,17 +42,30 @@ export function mixTextTags(mix: Mix): string[] {
 }
 
 /** Every tag in the project, mixes first then hashtags alphabetically. */
-export function allTags(bricks: Brick[], mixes: Mix[]): Tag[] {
-  const tags: Tag[] = mixes.map((m) => ({
-    id: `mix:${m.id}`,
-    label: m.name,
-    color: m.color,
-    kind: 'mix' as const,
-  }));
+export function allTags(
+  bricks: Brick[],
+  mixes: Mix[],
+  groups: Group[] = []
+): Tag[] {
+  const tags: Tag[] = [
+    ...groups.map((g) => ({
+      id: `group:${g.id}`,
+      label: g.name,
+      color: g.color,
+      kind: 'group' as const,
+    })),
+    ...mixes.map((m) => ({
+      id: `mix:${m.id}`,
+      label: m.name,
+      color: m.color,
+      kind: 'mix' as const,
+    })),
+  ];
 
   const text = new Set<string>();
   for (const b of bricks) brickTextTags(b).forEach((t) => text.add(t));
   for (const m of mixes) mixTextTags(m).forEach((t) => text.add(t));
+  for (const g of groups) parseHashtags(g.notes ?? '').forEach((t) => text.add(t));
 
   for (const t of [...text].sort()) {
     tags.push({
@@ -65,15 +79,32 @@ export function allTags(bricks: Brick[], mixes: Mix[]): Tag[] {
 }
 
 /** Tags carried by a brick: its hashtags plus the mixes it belongs to. */
-export function tagsForBrick(brick: Brick, mixes: Mix[]): Tag[] {
-  const out: Tag[] = mixes
+export function tagsForBrick(
+  brick: Brick,
+  mixes: Mix[],
+  groups: Group[] = []
+): Tag[] {
+  // a brick inherits the tags of any group it sits in, including that group's
+  // own hashtags
+  const out: Tag[] = groupsForBrick(brick, groups).flatMap((g) => [
+    { id: `group:${g.id}`, label: g.name, color: g.color, kind: 'group' as const },
+    ...parseHashtags(g.notes ?? '').map((t) => ({
+      id: `#${t}`,
+      label: `#${t}`,
+      color: TEXT_TAG_COLOR,
+      kind: 'text' as const,
+    })),
+  ]);
+  out.push(
+    ...mixes
     .filter((m) => m.layers.some((l) => l.brickId === brick.id))
-    .map((m) => ({
-      id: `mix:${m.id}`,
-      label: m.name,
-      color: m.color,
-      kind: 'mix' as const,
-    }));
+      .map((m) => ({
+        id: `mix:${m.id}`,
+        label: m.name,
+        color: m.color,
+        kind: 'mix' as const,
+      }))
+  );
   for (const t of brickTextTags(brick)) {
     out.push({ id: `#${t}`, label: `#${t}`, color: TEXT_TAG_COLOR, kind: 'text' });
   }

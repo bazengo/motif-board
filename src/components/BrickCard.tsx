@@ -29,7 +29,8 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const [menu, setMenu] = useState<null | 'main' | 'mix' | 'parent'>(null);
   const d = brick.display;
   const playhead = useBrickPlayhead(brick.id, brick.lengthBeats);
-  const myTags = tagsForBrick(brick, mixes);
+  const groups = useStore((s) => s.groups);
+  const myTags = tagsForBrick(brick, mixes, groups);
   const matches = matchesTags(myTags, activeTags);
   const filtering = activeTags.length > 0;
 

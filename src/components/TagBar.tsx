@@ -4,11 +4,12 @@ import { allTags } from '../lib/tags';
 export function TagBar() {
   const bricks = useStore((s) => s.bricks);
   const mixes = useStore((s) => s.mixes);
+  const groups = useStore((s) => s.groups);
   const activeTags = useStore((s) => s.activeTags);
   const toggleTag = useStore((s) => s.toggleTag);
   const clearTags = useStore((s) => s.clearTags);
 
-  const tags = allTags(bricks, mixes);
+  const tags = allTags(bricks, mixes, groups);
   if (tags.length === 0) return null;
 
   return (
@@ -28,6 +29,7 @@ export function TagBar() {
             title={t.kind === 'mix' ? `Mix: ${t.label}` : `Tag ${t.label}`}
           >
             {t.kind === 'mix' && <span className="tag-pill-icon">🎚</span>}
+            {t.kind === 'group' && <span className="tag-pill-icon">▣</span>}
             {t.label}
           </button>
         );

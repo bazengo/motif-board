@@ -557,7 +557,7 @@
 /* ---------- Mix node (on board) ---------- */
 .mix-node {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   background: #1b1f27;
   border: 2px solid #7bdff2;
   border-radius: 10px;
@@ -667,13 +667,111 @@
   color: #ffd166;
 }
 
+/* ---------- Group frames ---------- */
+/* stacking on the board: groups (0) < connectors (1) < cards & mixes (2) */
+.group-frame {
+  position: absolute;
+  z-index: 0;
+  border: 2px dashed;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.group-title {
+  position: absolute;
+  top: -13px;
+  left: 12px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 8px;
+  border-radius: 6px;
+  color: #16181d;
+  cursor: grab;
+  max-width: calc(100% - 24px);
+}
+.group-title:active {
+  cursor: grabbing;
+}
+.group-name {
+  background: transparent;
+  border: none;
+  color: #16181d;
+  font-weight: 700;
+  font-size: 12px;
+  width: 130px;
+  padding: 0;
+}
+.group-name:focus {
+  outline: none;
+  text-decoration: underline;
+}
+.group-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.group-menu {
+  position: absolute;
+  top: 16px;
+  left: 12px;
+  z-index: 40;
+  width: 240px;
+  background: #23252b;
+  border: 1px solid #3a3f4b;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+.group-menu button.danger {
+  background: transparent;
+  border: none;
+  color: #ff8a8a;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.group-menu button.danger:hover {
+  background: #31343d;
+}
+.group-notes {
+  background: #12151b;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 12px;
+  resize: vertical;
+}
+.group-resize {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  border-right: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  border-radius: 0 0 6px 0;
+  opacity: 0.5;
+  cursor: nwse-resize;
+}
+.group-resize:hover {
+  opacity: 1;
+}
+
 /* ---------- Lineage connectors ---------- */
 .board-links {
   position: absolute;
   left: 0;
   top: 0;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
 }
 
 /* ---------- Brick card (sticky note) ---------- */
@@ -685,7 +783,7 @@
   color: #23252b;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
   font-size: 13px;
-  z-index: 1;
+  z-index: 2;
 }
 .brick-handle {
   display: flex;
