@@ -7,6 +7,7 @@ import {
   type MixLayer,
   type Note,
   type PhraseTemplate,
+  type TimelineSection,
   type InstrumentId,
   STICKY_COLORS,
   MIX_COLORS,
@@ -146,12 +147,15 @@ interface AppState {
   mixes: Mix[];
   activeMixId: string | null;
   // transient: an in-progress "drag to connect" from a brick to the cursor
+  // transient drag-to-connect. `sourceId` is a brickId for mix/branch links,
+  // or a mixId when dragging a mix down onto the timeline.
   linking: {
-    brickId: string;
+    sourceId: string;
     x: number;
     y: number;
-    kind: 'mix' | 'branch';
+    kind: 'mix' | 'branch' | 'timeline';
   } | null;
+  timeline: TimelineSection[];
   // phrase-template "brush" used when clicking the piano roll
   templates: PhraseTemplate[];
   activeBrush: string | null; // template id, or null = single note
@@ -194,7 +198,21 @@ interface AppState {
   toggleBrickInMix: (mixId: string, brickId: string) => void;
   updateLayer: (mixId: string, brickId: string, patch: Partial<MixLayer>) => void;
   setLinking: (
-    v: { brickId: string; x: number; y: number; kind: 'mix' | 'branch' } | null
+    v: {
+      sourceId: string;
+      x: number;
+      y: number;
+      kind: 'mix' | 'branch' | 'timeline';
+    } | null
+  ) => void;
+
+  // timeline
+  addTimelineSection: (mixId: string, atIndex?: number) => string;
+  removeTimelineSection: (id: string) => void;
+  moveTimelineSection: (id: string, toIndex: number) => void;
+  updateTimelineSection: (
+    id: string,
+    patch: Partial<Omit<TimelineSection, 'id'>>
   ) => void;
 
   // phrase templates
@@ -216,6 +234,7 @@ export const useStore = create<AppState>()(
       mixes: [],
       activeMixId: null,
       linking: null,
+      timeline: [],
       templates: [],
       activeBrush: null,
       snapToScale: false,
@@ -402,6 +421,8 @@ export const useStore = create<AppState>()(
         set((s) => ({
           mixes: s.mixes.filter((m) => m.id !== mixId),
           activeMixId: s.activeMixId === mixId ? null : s.activeMixId,
+          // drop any timeline sections that referenced it
+          timeline: s.timeline.filter((t) => t.mixId !== mixId),
         })),
 
       updateMix: (mixId, patch) =>
@@ -460,6 +481,43 @@ export const useStore = create<AppState>()(
         })),
 
       setLinking: (v) => set({ linking: v }),
+
+      addTimelineSection: (mixId, atIndex) => {
+        const s = useStore.getState();
+        const section: TimelineSection = {
+          id: nanoid(8),
+          mixId,
+          repeats: 1,
+          lockBpm: true,
+          bpm: s.globalBpm,
+          timeSig: { num: 4, den: 4 },
+        };
+        set((st) => {
+          const next = [...st.timeline];
+          const i = atIndex == null ? next.length : Math.max(0, Math.min(next.length, atIndex));
+          next.splice(i, 0, section);
+          return { timeline: next };
+        });
+        return section.id;
+      },
+
+      removeTimelineSection: (id) =>
+        set((s) => ({ timeline: s.timeline.filter((t) => t.id !== id) })),
+
+      moveTimelineSection: (id, toIndex) =>
+        set((s) => {
+          const from = s.timeline.findIndex((t) => t.id === id);
+          if (from < 0) return {};
+          const next = [...s.timeline];
+          const [item] = next.splice(from, 1);
+          next.splice(Math.max(0, Math.min(next.length, toIndex)), 0, item);
+          return { timeline: next };
+        }),
+
+      updateTimelineSection: (id, patch) =>
+        set((s) => ({
+          timeline: s.timeline.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+        })),
 
       addTemplate: (name, notes) => {
         const tpl: PhraseTemplate = { id: nanoid(8), name, notes };
@@ -539,6 +597,7 @@ export const useStore = create<AppState>()(
         activeBrush: s.activeBrush,
         snapToScale: s.snapToScale,
         showNoteNames: s.showNoteNames,
+        timeline: s.timeline,
       }),
     }
   )

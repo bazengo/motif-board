@@ -11,7 +11,17 @@ export function Board() {
   const openEditor = useStore((s) => s.openEditor);
 
   const byId = new Map(bricks.map((b) => [b.id, b]));
-  const linkingBrick = linking ? byId.get(linking.brickId) : undefined;
+  // the live drag line starts at a brick card, or a mix node when dragging a
+  // mix down to the timeline
+  const linkFrom = (() => {
+    if (!linking) return null;
+    if (linking.kind === 'timeline') {
+      const m = mixes.find((x) => x.id === linking.sourceId);
+      return m ? { x: m.board.x + MIX_W / 2, y: m.board.y + MIX_H / 2 } : null;
+    }
+    const b = byId.get(linking.sourceId);
+    return b ? { x: b.board.x + CARD_W / 2, y: b.board.y + 20 } : null;
+  })();
 
   // lineage edges (dashed) — parent -> child
   const lineage = bricks
@@ -76,13 +86,19 @@ export function Board() {
 
       {(lineage.length > 0 || mixEdges.length > 0 || linking) && (
         <svg className="board-links" width={maxX} height={maxY}>
-          {linking && linkingBrick && (
+          {linking && linkFrom && (
             <line
-              x1={linkingBrick.board.x + CARD_W / 2}
-              y1={linkingBrick.board.y + 20}
+              x1={linkFrom.x}
+              y1={linkFrom.y}
               x2={linking.x}
               y2={linking.y}
-              stroke={linking.kind === 'branch' ? '#ffd166' : '#7bdff2'}
+              stroke={
+                linking.kind === 'branch'
+                  ? '#ffd166'
+                  : linking.kind === 'timeline'
+                    ? '#95d5b2'
+                    : '#7bdff2'
+              }
               strokeWidth={2.5}
               strokeDasharray="6 4"
             />

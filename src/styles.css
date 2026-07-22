@@ -123,6 +123,161 @@
   background-image: radial-gradient(#2c2c22 1px, transparent 1px);
   background-size: 22px 22px;
 }
+.board-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.board-col .board {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- Timeline ---------- */
+.timeline-wrap {
+  border-top: 1px solid #2c313d;
+  background: #1b1f27;
+  flex-shrink: 0;
+  max-height: 46vh;
+  display: flex;
+  flex-direction: column;
+}
+.timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.timeline-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.tl-collapse {
+  padding: 4px 8px;
+}
+.tl-meta {
+  font-size: 12px;
+  color: #8a92a3;
+}
+.tl-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.timeline-strip {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  overflow-x: auto;
+  padding: 0 12px 12px;
+  min-height: 132px;
+}
+.tl-empty {
+  font-size: 12px;
+  color: #8a92a3;
+  line-height: 1.6;
+  padding: 16px;
+  border: 1px dashed #3a4150;
+  border-radius: 8px;
+  width: 100%;
+  text-align: center;
+}
+.tl-section {
+  flex: 0 0 auto;
+  width: 210px;
+  border: 2px solid #7bdff2;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #12151b;
+}
+.tl-section.active {
+  box-shadow: 0 0 0 2px #5ef2a0;
+}
+.tl-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  color: #16181d;
+  font-weight: 700;
+  font-size: 12px;
+}
+.tl-sec-num {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.tl-sec-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-sec-move {
+  display: flex;
+  gap: 1px;
+}
+.tl-sec-body {
+  padding: 7px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.tl-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: #9aa3b2;
+}
+.tl-field input,
+.tl-field select {
+  background: #1b1f27;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 5px;
+  padding: 3px 5px;
+  font-size: 12px;
+  width: 62px;
+}
+.tl-field input:disabled {
+  opacity: 0.45;
+}
+.tl-timesig {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.tl-timesig input,
+.tl-timesig select {
+  width: 42px;
+}
+.tl-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #cfd4de;
+}
+.tl-sec-stats {
+  font-size: 10px;
+  color: #7f8798;
+  border-top: 1px solid #2c313d;
+  padding-top: 5px;
+}
+.timeline-handle {
+  cursor: crosshair;
+  touch-action: none;
+}
+.mix-node-handle-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .sidebar {
   width: 320px;
   flex-shrink: 0;

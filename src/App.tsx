@@ -15,6 +15,7 @@ import { Board } from './components/Board';
 import { MixPanel } from './components/MixPanel';
 import { BrickEditor } from './components/BrickEditor';
 import { MidiSelector } from './components/MidiSelector';
+import { TimelineStrip } from './components/TimelineStrip';
 import './styles.css';
 
 function App() {
@@ -167,7 +168,10 @@ function App() {
       </header>
 
       <div className="main">
-        <Board />
+        <div className="board-col">
+          <Board />
+          <TimelineStrip />
+        </div>
         <aside className="sidebar">
           <MixPanel />
         </aside>

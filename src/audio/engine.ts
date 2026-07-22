@@ -3,6 +3,7 @@ import { Note as TonalNote } from 'tonal';
 import type { Brick, InstrumentId } from '../types';
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
+import type { ScheduledNote } from '../lib/timeline';
 
 // Convert a MIDI pitch to a note name Tone understands ("C4", "F#5", ...).
 export function midiToName(midi: number): string {
@@ -50,7 +51,7 @@ function makeSynth(instrument: InstrumentId): Voiceable {
 }
 
 interface NoteEvent {
-  time: string;
+  time: string | number; // BBS for looped bricks, absolute seconds on the timeline
   note: string;
   dur: number; // seconds
   vel: number;
@@ -127,6 +128,11 @@ class AudioEngine {
 
   isBrickPlaying(brickId: string): boolean {
     return this.voices.has(brickId);
+  }
+
+  /** Elapsed transport time in seconds — for the timeline playhead. */
+  transportSeconds(): number {
+    return Math.max(0, Tone.getTransport().seconds);
   }
 
   private async ensureStarted() {
@@ -228,6 +234,83 @@ class AudioEngine {
 
   playBrick(brick: Brick) {
     return this.play([{ brick, loop: false, gain: 0.9 }], brick.bpm);
+  }
+
+  /**
+   * Play a pre-flattened arrangement. Times are absolute seconds (tempo is
+   * already baked in), so the transport runs at a constant rate and per-section
+   * tempo changes reproduce exactly.
+   */
+  async playPlan(notes: ScheduledNote[], totalSeconds: number) {
+    await this.ensureStarted();
+    this.stop();
+    if (notes.length === 0) return;
+
+    const transport = Tone.getTransport();
+    transport.bpm.value = 120; // irrelevant: all times are absolute seconds
+    this.currentBpm = 120;
+
+    // one voice per distinct brick (layer gain is folded into velocity)
+    const byBrick = new Map<string, ScheduledNote[]>();
+    for (const n of notes) {
+      const list = byBrick.get(n.brick.id);
+      if (list) list.push(n);
+      else byBrick.set(n.brick.id, [n]);
+    }
+
+    const midiActive = !!getSelectedOutput();
+    const internalOn = this.monitorInternal || !midiActive;
+    let index = 0;
+
+    for (const [brickId, list] of byBrick) {
+      const brick = list[0].brick;
+      const channel = brick.percussion ? DRUM_CHANNEL : index % 16;
+      this.usedChannels.add(channel);
+
+      let volume: Tone.Volume | null = null;
+      let synth: Voiceable | null = null;
+      if (internalOn) {
+        volume = new Tone.Volume(0).toDestination();
+        synth = makeSynth(brick.instrument).connect(volume);
+      }
+
+      const voice: Voice = {
+        brickId,
+        synth,
+        volume,
+        part: null as unknown as Tone.Part<NoteEvent>,
+        channel,
+        instrument: brick.instrument,
+        loop: false,
+        lengthBeats: brick.lengthBeats,
+        sig: brickSignature(brick),
+      };
+
+      const part = this.makePart(
+        voice,
+        list.map((n) => ({
+          time: n.time,
+          note: midiToName(n.pitch),
+          dur: n.dur,
+          vel: n.velocity,
+          pitch: n.pitch,
+        }))
+      );
+      part.loop = false;
+      part.start(0);
+      voice.part = part;
+
+      this.voices.set(brickId, voice);
+      index++;
+    }
+
+    transport.position = 0;
+    transport.start('+0.1');
+    this.emit(true);
+    this.endTimer = window.setTimeout(
+      () => this.stop(),
+      (totalSeconds + 0.6) * 1000
+    );
   }
 
   /** Re-read currently-playing bricks so edits are heard live (notes, length,

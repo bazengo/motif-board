@@ -62,6 +62,37 @@ export function exportMix(bricks: Brick[], bpm: number, filename = 'mix.mid') {
   download(midi.toArray(), filename);
 }
 
+/**
+ * Export a flattened arrangement. Note times already have per-section tempo
+ * baked in (absolute seconds), so a single header tempo reproduces the timing
+ * exactly — the notated tempo map is uniform, but playback is correct.
+ */
+export function exportTimeline(
+  notes: { brick: Brick; pitch: number; time: number; dur: number; velocity: number }[],
+  _totalSeconds: number,
+  filename = 'arrangement.mid'
+) {
+  const midi = new Midi();
+  midi.header.setTempo(120);
+  const tracks = new Map<string, ReturnType<Midi['addTrack']>>();
+  for (const n of notes) {
+    let track = tracks.get(n.brick.id);
+    if (!track) {
+      track = midi.addTrack();
+      track.name = n.brick.name;
+      if (n.brick.percussion) track.channel = DRUM_CHANNEL;
+      tracks.set(n.brick.id, track);
+    }
+    track.addNote({
+      midi: n.pitch,
+      time: n.time,
+      duration: n.dur,
+      velocity: n.velocity,
+    });
+  }
+  download(midi.toArray(), filename);
+}
+
 /** Import a .mid file -> one Brick per non-empty track. */
 export async function importMidi(file: File): Promise<Brick[]> {
   const buf = await file.arrayBuffer();

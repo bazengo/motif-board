@@ -65,10 +65,10 @@ export function BrickCard({ brick }: { brick: Brick }) {
     };
     const { setLinking } = useStore.getState();
     const p0 = toContent(e);
-    setLinking({ brickId: brick.id, x: p0.x, y: p0.y, kind });
+    setLinking({ sourceId: brick.id, x: p0.x, y: p0.y, kind });
     const move = (ev: PointerEvent) => {
       const p = toContent(ev);
-      setLinking({ brickId: brick.id, x: p.x, y: p.y, kind });
+      setLinking({ sourceId: brick.id, x: p.x, y: p.y, kind });
     };
     const cleanup = () => {
       window.removeEventListener('pointermove', move);

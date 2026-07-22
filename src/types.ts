@@ -110,6 +110,17 @@ export interface Mix {
   layers: MixLayer[];
 }
 
+/** One placed mix on the arrangement timeline. Sections play in order; each
+ *  either follows the master tempo or runs at its own. */
+export interface TimelineSection {
+  id: string;
+  mixId: string;
+  repeats: number; // how many times the mix loops within this section
+  lockBpm: boolean; // true = follow the master/project tempo
+  bpm: number; // used when lockBpm is false
+  timeSig: { num: number; den: number };
+}
+
 export const MIX_COLORS = [
   '#7bdff2',
   '#b8f2e6',
