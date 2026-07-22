@@ -4,6 +4,7 @@ import { exportMix } from '../lib/midi';
 import { mixAllItems, mixBpm } from '../lib/mix';
 import { MIX_W } from '../layout';
 import { tagsForMix, matchesTags } from '../lib/tags';
+import { clientToBoard } from '../lib/boardCoords';
 import type { Mix } from '../types';
 
 export function MixNode({ mix }: { mix: Mix }) {
@@ -23,11 +24,14 @@ export function MixNode({ mix }: { mix: Mix }) {
   function onHandleDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
     setActiveMix(mix.id);
-    const dx = e.clientX - mix.board.x;
-    const dy = e.clientY - mix.board.y;
+    const p0 = clientToBoard(e.clientX, e.clientY);
+    const offX = p0.x - mix.board.x;
+    const offY = p0.y - mix.board.y;
     (e.target as Element).setPointerCapture(e.pointerId);
-    const move = (ev: PointerEvent) =>
-      moveMix(mix.id, Math.max(0, ev.clientX - dx), Math.max(0, ev.clientY - dy));
+    const move = (ev: PointerEvent) => {
+      const p = clientToBoard(ev.clientX, ev.clientY);
+      moveMix(mix.id, Math.max(0, p.x - offX), Math.max(0, p.y - offY));
+    };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
@@ -46,15 +50,8 @@ export function MixNode({ mix }: { mix: Mix }) {
     if (e.button !== 0) return;
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
-    const board = document.querySelector('.board') as HTMLElement | null;
-    if (!board) return;
-    const toContent = (ev: PointerEvent | React.PointerEvent) => {
-      const r = board.getBoundingClientRect();
-      return {
-        x: ev.clientX - r.left + board.scrollLeft,
-        y: ev.clientY - r.top + board.scrollTop,
-      };
-    };
+    const toContent = (ev: PointerEvent | React.PointerEvent) =>
+      clientToBoard(ev.clientX, ev.clientY);
     const setLinking = useStore.getState().setLinking;
     const p0 = toContent(e);
     setLinking({ sourceId: mix.id, x: p0.x, y: p0.y, kind: 'timeline' });

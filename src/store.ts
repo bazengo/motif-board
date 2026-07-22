@@ -129,6 +129,9 @@ interface AppState {
   clipboard: { dp: number; start: number; duration: number; velocity: number }[];
   /** Tag ids currently filtering the board (empty = show everything). */
   activeTags: string[];
+  /** Board zoom factor. Board coordinates stay unscaled; this only affects
+   *  rendering and client<->board conversion. */
+  zoom: number;
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -193,6 +196,7 @@ interface AppState {
   setGrid: (v: number) => void;
   toggleTag: (id: string) => void;
   clearTags: () => void;
+  setZoom: (v: number) => void;
   copyNotes: (brickId: string, noteIds: string[], cut?: boolean) => void;
   pasteNotes: (brickId: string) => string[];
   quantize: (brickId: string, noteIds: string[] | null, grid: number) => void;
@@ -216,6 +220,7 @@ export const useStore = create<AppState>()(
       grid: 0.25,
       clipboard: [],
       activeTags: [],
+      zoom: 1,
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -532,6 +537,7 @@ export const useStore = create<AppState>()(
             : [...s.activeTags, id],
         })),
       clearTags: () => set({ activeTags: [] }),
+      setZoom: (v) => set({ zoom: Math.max(0.2, Math.min(2, v)) }),
 
       copyNotes: (brickId, noteIds, cut = false) => {
         const s = useStore.getState();

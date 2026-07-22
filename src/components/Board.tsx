@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { BrickCard } from './BrickCard';
 import { MixNode } from './MixNode';
-import { CARD_W, MIX_W, MIX_H } from '../layout';
+import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
+import { clientToBoard } from '../lib/boardCoords';
 
 export function Board() {
   const bricks = useStore((s) => s.bricks);
@@ -9,6 +11,35 @@ export function Board() {
   const linking = useStore((s) => s.linking);
   const addBrick = useStore((s) => s.addBrick);
   const openEditor = useStore((s) => s.openEditor);
+  const zoom = useStore((s) => s.zoom);
+  const setZoom = useStore((s) => s.setZoom);
+  const boardRef = useRef<HTMLDivElement | null>(null);
+
+  // Ctrl/⌘ + wheel zooms around the cursor. Registered manually so it can be
+  // non-passive and therefore preventDefault the browser's page zoom.
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const el2 = boardRef.current!;
+      const z = useStore.getState().zoom;
+      const r = el2.getBoundingClientRect();
+      const cx = e.clientX - r.left;
+      const cy = e.clientY - r.top;
+      const bx = (cx + el2.scrollLeft) / z;
+      const by = (cy + el2.scrollTop) / z;
+      const nz = Math.max(0.2, Math.min(2, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+      useStore.getState().setZoom(nz);
+      requestAnimationFrame(() => {
+        el2.scrollLeft = bx * nz - cx;
+        el2.scrollTop = by * nz - cy;
+      });
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const byId = new Map(bricks.map((b) => [b.id, b]));
   // the live drag line starts at a brick card, or a mix node when dragging a
@@ -80,17 +111,62 @@ export function Board() {
   }
 
   function onBoardDoubleClick(e: React.MouseEvent) {
-    if (e.target !== e.currentTarget) return; // only empty board space
-    const el = e.currentTarget as HTMLDivElement;
-    const r = el.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - r.left + el.scrollLeft - CARD_W / 2);
-    const y = Math.max(0, e.clientY - r.top + el.scrollTop - 10);
-    addBrick({ board: { x, y, rotation: (Math.random() - 0.5) * 4 } });
+    // only empty board space (the scaled canvas is the other valid target)
+    const t = e.target as HTMLElement;
+    if (!t.classList.contains('board') && !t.classList.contains('board-scaled'))
+      return;
+    const p = clientToBoard(e.clientX, e.clientY);
+    addBrick({
+      board: {
+        x: Math.max(0, p.x - CARD_W / 2),
+        y: Math.max(0, p.y - 10),
+        rotation: (Math.random() - 0.5) * 4,
+      },
+    });
+  }
+
+  /** Zoom so everything on the board fits in view. */
+  function fitToView() {
+    const el = boardRef.current;
+    if (!el) return;
+    if (bricks.length === 0 && mixes.length === 0) {
+      setZoom(1);
+      return;
+    }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const b of bricks) {
+      x0 = Math.min(x0, b.board.x);
+      y0 = Math.min(y0, b.board.y);
+      x1 = Math.max(x1, b.board.x + CARD_W);
+      y1 = Math.max(y1, b.board.y + CARD_H);
+    }
+    for (const m of mixes) {
+      x0 = Math.min(x0, m.board.x);
+      y0 = Math.min(y0, m.board.y);
+      x1 = Math.max(x1, m.board.x + MIX_W);
+      y1 = Math.max(y1, m.board.y + MIX_H);
+    }
+    const pad = 40;
+    const z = Math.max(
+      0.2,
+      Math.min(
+        1,
+        el.clientWidth / (x1 - x0 + pad * 2),
+        el.clientHeight / (y1 - y0 + pad * 2)
+      )
+    );
+    setZoom(z);
+    requestAnimationFrame(() => {
+      el.scrollLeft = (x0 - pad) * z;
+      el.scrollTop = (y0 - pad) * z;
+    });
   }
 
   return (
+    <div className="board-wrap">
     <div
       className="board"
+      ref={boardRef}
       onDoubleClick={onBoardDoubleClick}
       onPointerDown={onBoardPointerDown}
       // suppress Windows' middle-click autoscroll and Linux middle-click paste
@@ -121,6 +197,19 @@ export function Board() {
         </div>
       )}
 
+      <div
+        className="board-canvas"
+        style={{ width: maxX * zoom, height: maxY * zoom }}
+      >
+      <div
+        className="board-scaled"
+        style={{
+          width: maxX,
+          height: maxY,
+          transform: `scale(${zoom})`,
+          transformOrigin: '0 0',
+        }}
+      >
       {(lineage.length > 0 || mixEdges.length > 0 || linking) && (
         <svg className="board-links" width={maxX} height={maxY}>
           {linking && linkFrom && (
@@ -183,6 +272,36 @@ export function Board() {
       {bricks.map((b) => (
         <BrickCard key={b.id} brick={b} />
       ))}
+      </div>
+      </div>
+    </div>
+
+      <div className="zoom-controls">
+        <button
+          className="zoom-btn"
+          onClick={() => setZoom(zoom / 1.15)}
+          title="Zoom out"
+        >
+          −
+        </button>
+        <button
+          className="zoom-level"
+          onClick={() => setZoom(1)}
+          title="Reset to 100%"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          className="zoom-btn"
+          onClick={() => setZoom(zoom * 1.15)}
+          title="Zoom in"
+        >
+          +
+        </button>
+        <button className="zoom-btn wide" onClick={fitToView} title="Fit everything in view">
+          Fit
+        </button>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
 import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
+import { clientToBoard } from '../lib/boardCoords';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -36,11 +37,15 @@ export function BrickCard({ brick }: { brick: Brick }) {
 
   function onHandleDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
-    const dx = e.clientX - brick.board.x;
-    const dy = e.clientY - brick.board.y;
+    // work in board space so dragging tracks the cursor at any zoom
+    const p0 = clientToBoard(e.clientX, e.clientY);
+    const offX = p0.x - brick.board.x;
+    const offY = p0.y - brick.board.y;
     (e.target as Element).setPointerCapture(e.pointerId);
-    const move = (ev: PointerEvent) =>
-      moveBrick(brick.id, Math.max(0, ev.clientX - dx), Math.max(0, ev.clientY - dy));
+    const move = (ev: PointerEvent) => {
+      const p = clientToBoard(ev.clientX, ev.clientY);
+      moveBrick(brick.id, Math.max(0, p.x - offX), Math.max(0, p.y - offY));
+    };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
@@ -56,15 +61,8 @@ export function BrickCard({ brick }: { brick: Brick }) {
     if (e.button !== 0) return;
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
-    const board = document.querySelector('.board') as HTMLElement | null;
-    if (!board) return;
-    const toContent = (ev: PointerEvent | React.PointerEvent) => {
-      const r = board.getBoundingClientRect();
-      return {
-        x: ev.clientX - r.left + board.scrollLeft,
-        y: ev.clientY - r.top + board.scrollTop,
-      };
-    };
+    const toContent = (ev: PointerEvent | React.PointerEvent) =>
+      clientToBoard(ev.clientX, ev.clientY);
     const { setLinking } = useStore.getState();
     const p0 = toContent(e);
     setLinking({ sourceId: brick.id, x: p0.x, y: p0.y, kind });
