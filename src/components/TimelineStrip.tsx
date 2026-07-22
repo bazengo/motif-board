@@ -29,6 +29,8 @@ export function TimelineStrip() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [dragOut, setDragOut] = useState(false);
+  const [playhead, setPlayhead] = useState(0); // seek position when not running
+  const [loopAll, setLoopAll] = useState(false);
   const editorOpen = useStore((s) => s.editorOpen);
   const laneRef = useRef<HTMLDivElement | null>(null);
   const linking = useStore((s) => s.linking);
@@ -102,8 +104,53 @@ export function TimelineStrip() {
           return elapsed >= start && elapsed < end;
         });
 
-  function playTimeline() {
-    if (plan.notes.length) engine.playPlan(plan.notes, plan.totalSeconds);
+  // ---- transport ----
+  // while running the playhead follows the transport; otherwise it sits where
+  // it was last sought to
+  const running = playing && engine.playbackMode === 'timeline';
+  const displayHead = elapsed ?? playhead;
+  const atEnd = playhead >= plan.totalSeconds - 0.01;
+
+  function play() {
+    if (engine.isPaused && engine.playbackMode === 'timeline') {
+      engine.resumeTransport();
+      return;
+    }
+    if (!plan.notes.length) return;
+    engine.playPlan(plan.notes, plan.totalSeconds, atEnd ? 0 : playhead, loopAll);
+  }
+  function pause() {
+    setPlayhead(engine.transportSeconds());
+    engine.pauseTransport();
+  }
+  function stopAll() {
+    engine.stop();
+    setPlayhead(0);
+  }
+  function toStart() {
+    setPlayhead(0);
+    engine.seek(0);
+  }
+
+  /** Scrub by dragging the ruler. */
+  function onRulerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    const lane = laneRef.current;
+    if (!lane) return;
+    const seekTo = (clientX: number) => {
+      const x = clientX - lane.getBoundingClientRect().left;
+      const t = Math.max(0, Math.min(plan.totalSeconds, x / pxPerSec));
+      setPlayhead(t);
+      engine.seek(t);
+    };
+    seekTo(e.clientX);
+    const move = (ev: PointerEvent) => seekTo(ev.clientX);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   }
 
   /** Drag a block along the lane to reorder the arrangement. */
@@ -177,11 +224,39 @@ export function TimelineStrip() {
           {collapsed ? '▲' : '▼'}
         </button>
         <h3>Timeline</h3>
+
+        <div className="tl-transport">
+          <button className="tp-btn" onClick={toStart} title="Return to start">
+            ⏮
+          </button>
+          <button
+            className="tp-btn play"
+            onClick={running ? pause : play}
+            disabled={plan.notes.length === 0}
+            title={running ? 'Pause' : 'Play arrangement'}
+          >
+            {running ? '⏸' : '▶'}
+          </button>
+          <button className="tp-btn" onClick={stopAll} title="Stop">
+            ■
+          </button>
+          <button
+            className={'tp-btn' + (loopAll ? ' on' : '')}
+            onClick={() => setLoopAll((v) => !v)}
+            title="Loop the arrangement"
+          >
+            ⟲
+          </button>
+          <span className="tp-time">
+            {formatDuration(displayHead)}
+            <span className="tp-total"> / {formatDuration(plan.totalSeconds)}</span>
+          </span>
+        </div>
+
         <span className="tl-meta">
-          {timeline.length} section{timeline.length === 1 ? '' : 's'} ·{' '}
-          {formatDuration(plan.totalSeconds)}
-          {elapsed != null && <> · {formatDuration(elapsed)}</>}
+          {timeline.length} section{timeline.length === 1 ? '' : 's'}
         </span>
+
         <div className="tl-actions">
           <div className="btn-group">
             <button
@@ -200,16 +275,6 @@ export function TimelineStrip() {
             </button>
           </div>
           <button
-            className="primary-btn"
-            onClick={playTimeline}
-            disabled={plan.notes.length === 0}
-          >
-            ▶ Play arrangement
-          </button>
-          <button className="ghost-btn" onClick={() => engine.stop()}>
-            ■
-          </button>
-          <button
             className="ghost-btn"
             disabled={plan.notes.length === 0}
             onClick={() => exportTimeline(plan.notes, plan.totalSeconds)}
@@ -225,7 +290,11 @@ export function TimelineStrip() {
           <div className="tl-scroll">
             <div style={{ width: totalWidth, position: 'relative' }}>
               {/* time codes */}
-              <div className="tl-ruler">
+              <div
+                className="tl-ruler"
+                onPointerDown={onRulerDown}
+                title="Drag to scrub"
+              >
                 {ticks.map((t) => (
                   <div key={t} className="tl-tick" style={{ left: t * pxPerSec }}>
                     <span>{formatDuration(t)}</span>
@@ -320,12 +389,10 @@ export function TimelineStrip() {
                   );
                 })}
 
-                {elapsed != null && (
-                  <div
-                    className="tl-playhead"
-                    style={{ left: elapsed * pxPerSec }}
-                  />
-                )}
+                <div
+                  className={'tl-playhead' + (running ? '' : ' idle')}
+                  style={{ left: displayHead * pxPerSec }}
+                />
               </div>
             </div>
           </div>

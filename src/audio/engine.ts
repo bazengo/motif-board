@@ -138,8 +138,34 @@ class AudioEngine {
   /** What's playing — the timeline playhead should only follow an arrangement. */
   private mode: 'idle' | 'clip' | 'timeline' = 'idle';
 
+  private paused = false;
+
   get playbackMode(): 'idle' | 'clip' | 'timeline' {
     return this.mode;
+  }
+  get isPaused(): boolean {
+    return this.paused;
+  }
+
+  /** Pause without tearing down — the schedule survives so it can resume. */
+  pauseTransport() {
+    if (this.voices.size === 0) return;
+    Tone.getTransport().pause();
+    this.paused = true;
+    this.emit(false);
+  }
+
+  resumeTransport() {
+    if (this.voices.size === 0) return;
+    Tone.getTransport().start(`+${START_DELAY}`);
+    this.paused = false;
+    this.emit(true);
+  }
+
+  /** Move the play position (seconds from the start of the material). */
+  seek(seconds: number) {
+    if (this.voices.size === 0) return;
+    Tone.getTransport().seconds = Math.max(0, PART_LEAD + seconds);
   }
   /** Tempo the transport is currently running at. */
   get bpm(): number {
@@ -369,7 +395,12 @@ class AudioEngine {
    * already baked in), so the transport runs at a constant rate and per-section
    * tempo changes reproduce exactly.
    */
-  async playPlan(notes: ScheduledNote[], totalSeconds: number) {
+  async playPlan(
+    notes: ScheduledNote[],
+    totalSeconds: number,
+    startSec = 0,
+    loop = false
+  ) {
     await this.ensureStarted();
     this.stop();
     if (notes.length === 0) return;
@@ -441,12 +472,24 @@ class AudioEngine {
     if (token !== this.playToken) return; // superseded while waiting
 
     transport.position = 0;
-    transport.start(`+${START_DELAY}`);
+    if (loop) {
+      transport.loop = true;
+      transport.loopStart = PART_LEAD;
+      transport.loopEnd = PART_LEAD + totalSeconds;
+    } else {
+      transport.loop = false;
+    }
+    this.paused = false;
+    transport.start(`+${START_DELAY}`, PART_LEAD + Math.max(0, startSec));
     this.emit(true);
-    this.endTimer = window.setTimeout(
-      () => this.stop(),
-      (totalSeconds + PART_LEAD + START_DELAY + 0.6) * 1000
-    );
+
+    if (!loop) {
+      const remaining = Math.max(0, totalSeconds - Math.max(0, startSec));
+      this.endTimer = window.setTimeout(
+        () => this.stop(),
+        (remaining + PART_LEAD + START_DELAY + 0.6) * 1000
+      );
+    }
   }
 
   /** Re-read currently-playing bricks so edits are heard live (notes, length,
@@ -603,6 +646,8 @@ class AudioEngine {
     const transport = Tone.getTransport();
     transport.stop();
     transport.cancel();
+    transport.loop = false;
+    this.paused = false;
     this.allNotesOff();
     for (const v of this.voices.values()) {
       v.part.dispose();
