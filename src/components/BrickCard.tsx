@@ -4,7 +4,7 @@ import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
-import { tagsForBrick, matchesTags } from '../lib/tags';
+import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
 import type { Brick, BrickDisplay } from '../types';
 import { STICKY_COLORS } from '../types';
 
@@ -324,8 +324,8 @@ export function BrickCard({ brick }: { brick: Brick }) {
       {d.showLyrics && brick.lyrics && (
         <div className="brick-lyrics">{brick.lyrics.split('\n')[0]}</div>
       )}
-      {d.showNotes && brick.processNotes && (
-        <div className="brick-desc">{brick.processNotes}</div>
+      {d.showNotes && stripHashtags(brick.processNotes) && (
+        <div className="brick-desc">{stripHashtags(brick.processNotes)}</div>
       )}
       {d.preview && (
         <div className="brick-preview">

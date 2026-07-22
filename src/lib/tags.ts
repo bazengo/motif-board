@@ -21,6 +21,17 @@ export function parseHashtags(text: string): string[] {
   return [...new Set(out)];
 }
 
+/** Text with its #hashtags removed — they're rendered as pills instead. */
+export function stripHashtags(text: string): string {
+  return text
+    .replace(/#([\p{L}\p{N}_-]+)/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .split('\n')
+    .map((l) => l.trimEnd())
+    .join('\n')
+    .trim();
+}
+
 export function brickTextTags(brick: Brick): string[] {
   return parseHashtags(brick.processNotes ?? '');
 }
