@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import { descendantIds, familyIds } from './lib/lineage';
-import { bricksInGroup } from './lib/groups';
+import { bricksInGroup, mixesInGroup } from './lib/groups';
 import {
   type Brick,
   type Mix,
@@ -205,8 +205,8 @@ interface AppState {
     id: string,
     x: number,
     y: number,
-    /** Bricks to carry; pinned at drag start so the frame can't collect more. */
-    carryIds?: string[]
+    /** Members to carry; pinned at drag start so the frame can't collect more. */
+    carry?: { brickIds: string[]; mixIds: string[] }
   ) => void;
   resizeGroup: (id: string, w: number, h: number) => void;
 
@@ -526,21 +526,24 @@ export const useStore = create<AppState>()(
        * set for the whole drag — recomputing it per frame made the group
        * scoop up every card it swept over while you were tidying the board.
        */
-      moveGroup: (id, x, y, carryIds) => {
+      moveGroup: (id, x, y, carry) => {
         const s = useStore.getState();
         const g = s.groups.find((gg) => gg.id === id);
         if (!g) return;
         const dx = x - g.board.x;
         const dy = y - g.board.y;
-        const inside = new Set(
-          carryIds ?? bricksInGroup(g, s.bricks).map((b) => b.id)
+        const brickIds = new Set(
+          carry?.brickIds ?? bricksInGroup(g, s.bricks).map((b) => b.id)
+        );
+        const mixIds = new Set(
+          carry?.mixIds ?? mixesInGroup(g, s.mixes).map((m) => m.id)
         );
         set((st) => ({
           groups: st.groups.map((gg) =>
             gg.id === id ? { ...gg, board: { ...gg.board, x, y } } : gg
           ),
           bricks: st.bricks.map((b) =>
-            inside.has(b.id)
+            brickIds.has(b.id)
               ? {
                   ...b,
                   board: {
@@ -550,6 +553,17 @@ export const useStore = create<AppState>()(
                   },
                 }
               : b
+          ),
+          mixes: st.mixes.map((m) =>
+            mixIds.has(m.id)
+              ? {
+                  ...m,
+                  board: {
+                    x: Math.max(0, m.board.x + dx),
+                    y: Math.max(0, m.board.y + dy),
+                  },
+                }
+              : m
           ),
         }));
       },

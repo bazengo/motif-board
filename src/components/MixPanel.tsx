@@ -205,6 +205,7 @@ export function MixPanel() {
                 color={brick!.color}
                 lengthBeats={mixLengthBeats(mix, bricks)}
                 bpm={mixBpm(mix, globalBpm)}
+                brick={brick}
                 onChange={(pts) =>
                   updateLayer(mix.id, l.brickId, { automation: pts })
                 }

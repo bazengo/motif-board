@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { clientToBoard } from '../lib/boardCoords';
-import { bricksInGroup } from '../lib/groups';
+import { bricksInGroup, mixesInGroup } from '../lib/groups';
 import { matchesTags } from '../lib/tags';
 import { MIX_COLORS, type Group } from '../types';
 
 export function GroupFrame({ group }: { group: Group }) {
   const bricks = useStore((s) => s.bricks);
+  const mixes = useStore((s) => s.mixes);
   const activeTags = useStore((s) => s.activeTags);
   const updateGroup = useStore((s) => s.updateGroup);
   const deleteGroup = useStore((s) => s.deleteGroup);
@@ -14,7 +15,8 @@ export function GroupFrame({ group }: { group: Group }) {
   const resizeGroup = useStore((s) => s.resizeGroup);
   const [menu, setMenu] = useState(false);
 
-  const count = bricksInGroup(group, bricks).length;
+  const count =
+    bricksInGroup(group, bricks).length + mixesInGroup(group, mixes).length;
   const filtering = activeTags.length > 0;
   const matches = matchesTags(
     [{ id: `group:${group.id}`, label: group.name, color: group.color, kind: 'group' }],
@@ -29,7 +31,10 @@ export function GroupFrame({ group }: { group: Group }) {
     const offY = p0.y - group.board.y;
     // pin the members now: the frame carries these and only these, so sweeping
     // it across the board while tidying doesn't collect everything it passes
-    const carried = bricksInGroup(group, bricks).map((b) => b.id);
+    const carried = {
+      brickIds: bricksInGroup(group, bricks).map((b) => b.id),
+      mixIds: mixesInGroup(group, mixes).map((m) => m.id),
+    };
     (e.target as Element).setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
       const p = clientToBoard(ev.clientX, ev.clientY);

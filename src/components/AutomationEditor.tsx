@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { sortPoints } from '../lib/automation';
-import type { AutomationPoint } from '../types';
+import type { AutomationPoint, Brick } from '../types';
 
 const W = 268;
 const H = 74;
@@ -17,12 +17,15 @@ export function AutomationEditor({
   color,
   lengthBeats,
   bpm,
+  brick,
   onChange,
 }: {
   points: AutomationPoint[];
   color: string;
   lengthBeats: number;
   bpm: number;
+  /** The layer's brick, drawn faintly behind the envelope for reference. */
+  brick?: Brick;
   onChange: (pts: AutomationPoint[]) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -113,8 +116,36 @@ export function AutomationEditor({
         onPointerDown={addPoint}
       >
         <rect x={0} y={0} width={W} height={H} rx={6} fill="#12151b" />
+
+        {/* faint piano-roll of the layer's own notes, so the envelope can be
+            drawn against what actually plays */}
+        {brick && brick.notes.length > 0 && (() => {
+          const pitches = brick.notes.map((n) => n.pitch);
+          let lo = Math.min(...pitches);
+          let hi = Math.max(...pitches);
+          const span = Math.max(6, hi - lo + 2);
+          lo -= 1;
+          const noteLen = brick.lengthBeats > 0 ? brick.lengthBeats : 1;
+          return brick.notes.map((n) => {
+            const x = PAD + (n.start / noteLen) * innerW;
+            const w = Math.max(1, (n.duration / noteLen) * innerW);
+            const y = PAD + (1 - (n.pitch - lo) / span) * innerH;
+            return (
+              <rect
+                key={n.id}
+                x={x}
+                y={y}
+                width={w}
+                height={Math.max(1.5, innerH / span - 0.5)}
+                fill={color}
+                opacity={0.22}
+              />
+            );
+          });
+        })()}
+
         {[0.25, 0.5, 0.75].map((g) => (
-          <line key={g} x1={PAD} y1={py(g)} x2={W - PAD} y2={py(g)} stroke="#232936" />
+          <line key={g} x1={PAD} y1={py(g)} x2={W - PAD} y2={py(g)} stroke="#232936" opacity={0.6} />
         ))}
         <path
           d={`${shape} L ${px(1)} ${py(0)} L ${px(0)} ${py(0)} Z`}

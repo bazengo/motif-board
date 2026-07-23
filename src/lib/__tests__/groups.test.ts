@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { brickInGroup, bricksInGroup, groupsForBrick } from '../groups';
+import {
+  brickInGroup,
+  bricksInGroup,
+  groupsForBrick,
+  mixInGroup,
+  mixesInGroup,
+} from '../groups';
 import { tagsForBrick, allTags } from '../tags';
-import { testBrick } from './fixtures';
+import { testBrick, testMix } from './fixtures';
 import type { Group } from '../../types';
 
 function testGroup(partial: Partial<Group> = {}): Group {
@@ -55,6 +61,26 @@ describe('membership helpers', () => {
   it('lets overlapping groups both claim a brick', () => {
     const other = testGroup({ id: 'g2', board: { x: 120, y: 120, w: 400, h: 300 } });
     expect(groupsForBrick(inside, [group, other])).toHaveLength(2);
+  });
+});
+
+describe('mixes in a group', () => {
+  const group = testGroup({ board: { x: 100, y: 100, w: 400, h: 300 } });
+
+  it('contains a mix node inside the frame', () => {
+    expect(mixInGroup(group, testMix({ board: { x: 150, y: 150 } }))).toBe(true);
+  });
+
+  it('excludes a mix node outside it', () => {
+    expect(mixInGroup(group, testMix({ board: { x: 2000, y: 2000 } }))).toBe(false);
+  });
+
+  it('collects only the contained mixes', () => {
+    const inside = testMix({ board: { x: 150, y: 150 } });
+    const outside = testMix({ board: { x: 2000, y: 2000 } });
+    expect(mixesInGroup(group, [inside, outside]).map((m) => m.id)).toEqual([
+      inside.id,
+    ]);
   });
 });
 
