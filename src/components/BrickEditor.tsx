@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
@@ -39,6 +39,40 @@ export function BrickEditor() {
     () => parseProgression(brick?.chords ?? ''),
     [brick?.chords]
   );
+
+  // Transport / record shortcuts. Space play/pauses, shift-space restarts from
+  // the top, R toggles recording. Ignored while typing in a field.
+  const recRef = useRef(rec);
+  recRef.current = rec;
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+      )
+        return;
+      const st = useStore.getState();
+      const b = st.bricks.find((x) => x.id === st.selectedBrickId);
+      if (!b) return;
+      const playFromTop = () =>
+        engine.play([{ brick: b, loop: st.editorLoop, gain: 0.9 }], b.bpm);
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (e.shiftKey) playFromTop();
+        else if (engine.isPaused) engine.resumeTransport();
+        else if (engine.isPlaying) engine.pauseTransport();
+        else playFromTop();
+      } else if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const r = recRef.current;
+        r.recording ? r.stop() : r.start();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (!brick || !brickId) return null;
 
@@ -220,6 +254,7 @@ export function BrickEditor() {
                   brick.bpm
                 )
               }
+              title="Space play/pause · Shift+Space from start · R record"
             >
               ▶ Play
             </button>

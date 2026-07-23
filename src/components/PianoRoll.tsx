@@ -9,8 +9,8 @@ type Rect = { x0: number; y0: number; x1: number; y1: number };
 
 const PITCH_HIGH = 96; // C7
 const PITCH_LOW = 36; // C2
-const ROW_H = 16;
-const BEAT_W = 44;
+const BASE_ROW_H = 16;
+const BASE_BEAT_W = 44;
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const LANE_H = 60;
@@ -121,6 +121,10 @@ export function PianoRoll({
   const velRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const [startBeat, setStartBeat] = useState(0);
+  const [zoomX, setZoomX] = useState(1);
+  const [zoomY, setZoomY] = useState(1);
+  const BEAT_W = BASE_BEAT_W * zoomX;
+  const ROW_H = BASE_ROW_H * zoomY;
   const syncingRef = useRef(false);
   const marqueeRef = useRef<Marquee>(null);
   marqueeRef.current = marquee;
@@ -140,6 +144,27 @@ export function PianoRoll({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [brickId]);
+
+  // Ctrl/⌘ + wheel over the roll zooms horizontally, anchored at the cursor.
+  useEffect(() => {
+    const el = rollRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const box = rollRef.current!;
+      const rect = box.getBoundingClientRect();
+      const cx = e.clientX - rect.left; // px from the roll's left edge
+      const beatAt = (box.scrollLeft + cx) / (BASE_BEAT_W * zoomX);
+      const nz = Math.max(0.35, Math.min(4, zoomX * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+      setZoomX(nz);
+      requestAnimationFrame(() => {
+        box.scrollLeft = beatAt * (BASE_BEAT_W * nz) - cx;
+      });
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoomX]);
 
   // Keep the velocity lane horizontally aligned with the grid.
   function syncScroll(from: 'roll' | 'vel' | 'ruler') {
@@ -213,6 +238,16 @@ export function PianoRoll({
     const y = e.clientY - rect.top;
     const row = Math.floor(y / ROW_H);
     return { x, y, beat: x / BEAT_W, row, pitch: pitchOfRow(row) };
+  }
+
+  // marquee hit-test in the roll's own (zoomed) pixel space, using the row
+  // mapping so it's correct for the non-contiguous drum grid too
+  function noteInRect(n: Note, m: Rect): boolean {
+    const nx0 = n.start * BEAT_W;
+    const nx1 = nx0 + Math.max(6, n.duration * BEAT_W);
+    const ny0 = rowOfPitch(n.pitch) * ROW_H;
+    const ny1 = ny0 + ROW_H;
+    return nx0 < m.x1 && nx1 > m.x0 && ny0 < m.y1 && ny1 > m.y0;
   }
 
   useEffect(() => {
@@ -354,7 +389,7 @@ export function PianoRoll({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [brick, updateNote, updateNotesBatch, addNote, audition, lastDur, grid]);
+  }, [brick, updateNote, updateNotesBatch, addNote, audition, lastDur, grid, zoomX, zoomY]);
 
   if (!brick) return null;
 
@@ -552,6 +587,15 @@ export function PianoRoll({
   return (
     <div className="roll-with-vel">
     <div className="roll-editbar">
+      <span className="zoom-group" title="Zoom (Ctrl+wheel over the roll zooms horizontally)">
+        <span className="zoom-label">↔</span>
+        <button className="nv-btn" onClick={() => setZoomX((z) => Math.max(0.35, z / 1.3))}>−</button>
+        <button className="nv-btn" onClick={() => setZoomX((z) => Math.min(4, z * 1.3))}>+</button>
+        <span className="zoom-label">↕</span>
+        <button className="nv-btn" onClick={() => setZoomY((z) => Math.max(0.6, z / 1.25))}>−</button>
+        <button className="nv-btn" onClick={() => setZoomY((z) => Math.min(2.5, z * 1.25))}>+</button>
+      </span>
+
       <span className="note-palette" title="Length given to notes you place">
         {NOTE_VALUES.map((v) => {
           const beats = v.beats * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
@@ -1009,10 +1053,3 @@ function normRect(r: Rect): Rect {
   };
 }
 
-function noteInRect(n: Note, m: Rect): boolean {
-  const nx0 = n.start * BEAT_W;
-  const nx1 = nx0 + Math.max(6, n.duration * BEAT_W);
-  const ny0 = (PITCH_HIGH - n.pitch) * ROW_H;
-  const ny1 = ny0 + ROW_H;
-  return nx0 < m.x1 && nx1 > m.x0 && ny0 < m.y1 && ny1 > m.y0;
-}
