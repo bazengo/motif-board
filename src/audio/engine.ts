@@ -8,7 +8,7 @@ import type {
   AutomationPoint,
 } from '../types';
 import { DEFAULT_ENVELOPE } from '../types';
-import { layerLevels } from '../lib/mix';
+import { layerLevels, mixLengthBeats } from '../lib/mix';
 import { evaluateAutomation, hasAutomation, sortPoints } from '../lib/automation';
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
@@ -132,6 +132,8 @@ interface Voice {
   autoSig: string;
   autoId: number | null;
   loopSec: number;
+  /** Period of one automation pass (whole mix length), seconds. */
+  autoLen: number;
   part: Tone.Part<NoteEvent>;
   channel: number;
   instrument: InstrumentId;
@@ -147,6 +149,8 @@ type PlayItem = {
   loop: boolean;
   gain: number;
   automation?: AutomationPoint[];
+  /** Length of one automation pass in beats (the whole mix). */
+  autoLenBeats?: number;
 };
 
 function gainToDb(gain: number): number {
@@ -339,7 +343,7 @@ class AudioEngine {
       av.volume.value = 0; // 0 dB — no change
       return;
     }
-    const len = Math.max(0.05, voice.loopSec);
+    const len = Math.max(0.05, voice.autoLen);
     voice.autoId = transport.scheduleRepeat(
       (time) => {
         const pts = sortPoints(voice.automation);
@@ -391,7 +395,8 @@ class AudioEngine {
     channel: number,
     secPerBeat: number,
     startAt: number,
-    automation: AutomationPoint[] = []
+    automation: AutomationPoint[] = [],
+    autoLenBeats?: number
   ): Voice {
     const midiActive = !!getSelectedOutput();
     const internalOn = this.monitorInternal || !midiActive;
@@ -415,6 +420,10 @@ class AudioEngine {
       autoSig: JSON.stringify(automation),
       autoId: null,
       loopSec: Math.max(0.05, brick.lengthBeats * secPerBeat),
+      autoLen: Math.max(
+        0.05,
+        (autoLenBeats ?? brick.lengthBeats) * secPerBeat
+      ),
       part: null as unknown as Tone.Part<NoteEvent>,
       channel,
       instrument: brick.instrument,
@@ -470,7 +479,8 @@ class AudioEngine {
     let maxEndBeats = 0;
     let index = 0;
 
-    for (const { brick, loop, gain, automation } of items) {
+    for (const item of items) {
+      const { brick, loop, gain, automation } = item;
       // percussion bricks always use GM channel 10 so drum kits respond;
       // melodic layers get their own channel so a multi-rack can separate them
       const channel = brick.percussion ? DRUM_CHANNEL : index % 16;
@@ -483,7 +493,8 @@ class AudioEngine {
         channel,
         secPerBeat,
         PART_LEAD,
-        automation ?? []
+        automation ?? [],
+        item.autoLenBeats
       );
       this.voices.set(brick.id, voice);
       anyLoop = anyLoop || loop;
@@ -575,6 +586,7 @@ class AudioEngine {
         autoSig: '[]',
         autoId: null,
         loopSec: 0,
+        autoLen: 0,
         part: null as unknown as Tone.Part<NoteEvent>,
         channel,
         instrument: brick.instrument,
@@ -683,6 +695,7 @@ class AudioEngine {
     const mix = mixes.find((m) => m.id === this.activeMixId);
     if (!mix) return;
     const levels = layerLevels(mix);
+    const mixLen = mixLengthBeats(mix, bricks);
 
     // --- membership: bricks ticked in/out of the mix during playback ---
     const wanted = new Set(mix.layers.map((l) => l.brickId));
@@ -715,7 +728,8 @@ class AudioEngine {
             channel,
             secPerBeat,
             startAt,
-            layer.automation ?? []
+            layer.automation ?? [],
+            mixLen
           )
         );
       }
@@ -737,7 +751,7 @@ class AudioEngine {
       if (sig !== voice.autoSig) {
         voice.autoSig = sig;
         voice.automation = layer.automation ?? [];
-        this.scheduleAutomation(voice, this.nextPassStart(voice.loopSec));
+        this.scheduleAutomation(voice, this.nextPassStart(voice.autoLen));
       }
     }
 

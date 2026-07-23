@@ -12,6 +12,16 @@ export function mixBpm(mix: Mix, globalBpm: number): number {
   return Number.isFinite(mix.bpm) && mix.bpm > 0 ? mix.bpm : fallback;
 }
 
+/** A mix is as long as its longest member brick (in quarter-note beats). */
+export function mixLengthBeats(mix: Mix, bricks: Brick[]): number {
+  let len = 0;
+  for (const l of mix.layers) {
+    const b = bricks.find((x) => x.id === l.brickId);
+    if (b) len = Math.max(len, b.lengthBeats);
+  }
+  return len || 4;
+}
+
 /** Effective gain for a layer, accounting for mute and any active solo. */
 export function layerLevels(mix: Mix): Map<string, number> {
   const anySolo = mix.layers.some((l) => l.solo);
@@ -30,6 +40,8 @@ export function layerLevels(mix: Mix): Map<string, number> {
  */
 export function mixAllItems(mix: Mix, bricks: Brick[]) {
   const levels = layerLevels(mix);
+  // automation spans one full pass of the whole mix, not each brick's own loop
+  const autoLenBeats = mixLengthBeats(mix, bricks);
   return mix.layers
     .map((l) => ({ l, brick: bricks.find((b) => b.id === l.brickId) }))
     .filter((r): r is { l: MixLayer; brick: Brick } => !!r.brick)
@@ -38,6 +50,7 @@ export function mixAllItems(mix: Mix, bricks: Brick[]) {
       loop: r.l.loop,
       gain: levels.get(r.l.brickId) ?? 0,
       automation: r.l.automation ?? [],
+      autoLenBeats,
     }));
 }
 

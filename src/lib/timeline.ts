@@ -1,16 +1,7 @@
 import type { Brick, Mix, TimelineSection } from '../types';
-import { mixPlayItems } from './mix';
+import { mixPlayItems, mixLengthBeats } from './mix';
+export { mixLengthBeats } from './mix';
 import { evaluateAutomation } from './automation';
-
-/** A mix is as long as its longest brick (in quarter-note beats). */
-export function mixLengthBeats(mix: Mix, bricks: Brick[]): number {
-  let len = 0;
-  for (const l of mix.layers) {
-    const b = bricks.find((x) => x.id === l.brickId);
-    if (b) len = Math.max(len, b.lengthBeats);
-  }
-  return len || 4;
-}
 
 export function sectionBpm(section: TimelineSection, masterBpm: number): number {
   return section.lockBpm ? masterBpm : section.bpm;

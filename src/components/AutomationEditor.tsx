@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { sortPoints } from '../lib/automation';
 import type { AutomationPoint, Brick } from '../types';
 
@@ -7,10 +7,10 @@ const H = 74;
 const PAD = 8;
 
 /**
- * Linear volume envelope over one pass of the mix. Click the lane to add a
- * breakpoint, drag to move, double-click a point to remove it. Hold shift
- * while dragging to match the previous point's level, which is how you get a
- * flat hold before a ramp.
+ * Linear volume envelope across one full pass of the mix (its longest brick),
+ * so a short clip loops several times under a single envelope. Click the lane
+ * to add a breakpoint, drag to move, double-click to remove. Hold shift while
+ * dragging to match the previous point's level for a flat hold before a ramp.
  */
 export function AutomationEditor({
   points,
@@ -117,31 +117,39 @@ export function AutomationEditor({
       >
         <rect x={0} y={0} width={W} height={H} rx={6} fill="#12151b" />
 
-        {/* faint piano-roll of the layer's own notes, so the envelope can be
-            drawn against what actually plays */}
+        {/* faint piano-roll of the layer's own notes over the whole mix pass,
+            tiled to show the clip looping under the envelope */}
         {brick && brick.notes.length > 0 && (() => {
           const pitches = brick.notes.map((n) => n.pitch);
           let lo = Math.min(...pitches);
-          let hi = Math.max(...pitches);
+          const hi = Math.max(...pitches);
           const span = Math.max(6, hi - lo + 2);
           lo -= 1;
-          const noteLen = brick.lengthBeats > 0 ? brick.lengthBeats : 1;
-          return brick.notes.map((n) => {
-            const x = PAD + (n.start / noteLen) * innerW;
-            const w = Math.max(1, (n.duration / noteLen) * innerW);
-            const y = PAD + (1 - (n.pitch - lo) / span) * innerH;
-            return (
-              <rect
-                key={n.id}
-                x={x}
-                y={y}
-                width={w}
-                height={Math.max(1.5, innerH / span - 0.5)}
-                fill={color}
-                opacity={0.22}
-              />
-            );
-          });
+          const brickLen = brick.lengthBeats > 0 ? brick.lengthBeats : 1;
+          const mixLen = lengthBeats > 0 ? lengthBeats : brickLen;
+          const passes = Math.max(1, Math.ceil(mixLen / brickLen));
+          const rects: ReactNode[] = [];
+          for (let p = 0; p < passes; p++) {
+            for (const n of brick.notes) {
+              const startBeat = p * brickLen + n.start;
+              if (startBeat >= mixLen) continue;
+              const x = PAD + (startBeat / mixLen) * innerW;
+              const w = Math.max(1, (n.duration / mixLen) * innerW);
+              const y = PAD + (1 - (n.pitch - lo) / span) * innerH;
+              rects.push(
+                <rect
+                  key={`${p}-${n.id}`}
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={Math.max(1.5, innerH / span - 0.5)}
+                  fill={color}
+                  opacity={p === 0 ? 0.24 : 0.12}
+                />
+              );
+            }
+          }
+          return rects;
         })()}
 
         {[0.25, 0.5, 0.75].map((g) => (
