@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
+import { bounceMix } from '../lib/bounce';
 import { mixAllItems, mixBpm } from '../lib/mix';
 import { mixLengthBeats } from '../lib/timeline';
 import { InfoTip } from './InfoTip';
@@ -17,6 +18,7 @@ export function MixPanel() {
   const addMix = useStore((s) => s.addMix);
   const updateMix = useStore((s) => s.updateMix);
   const openEditor = useStore((s) => s.openEditor);
+  const addBrick = useStore((s) => s.addBrick);
   const [expanded, setExpanded] = useState<string | null>(null);
   const updateLayer = useStore((s) => s.updateLayer);
   const toggleBrickInMix = useStore((s) => s.toggleBrickInMix);
@@ -230,6 +232,32 @@ export function MixPanel() {
         value={mix.notes}
         onChange={(e) => updateMix(mix.id, { notes: e.target.value })}
       />
+
+      {rows.length > 0 && (
+        <button
+          className="ghost-btn full"
+          title="Flatten this mix into a new, editable brick"
+          onClick={() => {
+            const b = bounceMix(mix, bricks, globalBpm);
+            const id = addBrick({
+              name: b.name,
+              notes: b.notes,
+              lengthBeats: b.lengthBeats,
+              bpm: b.bpm,
+              instrument: b.instrument,
+              percussion: b.percussion,
+              board: {
+                x: mix.board.x + 30,
+                y: mix.board.y + 120,
+                rotation: (Math.random() - 0.5) * 4,
+              },
+            });
+            openEditor(id);
+          }}
+        >
+          ⤵ Bounce to a new card
+        </button>
+      )}
 
       {rows.length > 0 && (
         <button

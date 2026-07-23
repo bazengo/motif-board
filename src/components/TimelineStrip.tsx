@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportTimeline } from '../lib/midi';
+import { bounceTimeline } from '../lib/bounce';
 import {
   buildTimelinePlan,
   sectionBpm,
@@ -32,6 +33,8 @@ export function TimelineStrip() {
   const [copyMode, setCopyMode] = useState(false);
   const duplicateSection = useStore((s) => s.duplicateTimelineSection);
   const addSection = useStore((s) => s.addTimelineSection);
+  const addBrick = useStore((s) => s.addBrick);
+  const openEditor = useStore((s) => s.openEditor);
   const [playhead, setPlayhead] = useState(0); // seek position when not running
   const [loopAll, setLoopAll] = useState(false);
   const editorOpen = useStore((s) => s.editorOpen);
@@ -304,6 +307,25 @@ export function TimelineStrip() {
               +
             </button>
           </div>
+          <button
+            className="ghost-btn"
+            disabled={plan.notes.length === 0}
+            onClick={() => {
+              const b = bounceTimeline(timeline, mixes, bricks, globalBpm);
+              const id = addBrick({
+                name: b.name,
+                notes: b.notes,
+                lengthBeats: b.lengthBeats,
+                bpm: b.bpm,
+                instrument: b.instrument,
+                percussion: b.percussion,
+              });
+              openEditor(id);
+            }}
+            title="Flatten the whole arrangement into a new, editable brick"
+          >
+            ⤵ Card
+          </button>
           <button
             className="ghost-btn"
             disabled={plan.notes.length === 0}
