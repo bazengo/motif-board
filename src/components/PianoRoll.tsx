@@ -119,6 +119,8 @@ export function PianoRoll({
   const renameRef = useRef<HTMLInputElement | null>(null);
   const rollRef = useRef<HTMLDivElement | null>(null);
   const velRef = useRef<HTMLDivElement | null>(null);
+  const rulerRef = useRef<HTMLDivElement | null>(null);
+  const [startBeat, setStartBeat] = useState(0);
   const syncingRef = useRef(false);
   const marqueeRef = useRef<Marquee>(null);
   marqueeRef.current = marquee;
@@ -140,14 +142,39 @@ export function PianoRoll({
   }, [brickId]);
 
   // Keep the velocity lane horizontally aligned with the grid.
-  function syncScroll(from: 'roll' | 'vel') {
+  function syncScroll(from: 'roll' | 'vel' | 'ruler') {
     if (syncingRef.current) return;
     syncingRef.current = true;
-    if (from === 'roll' && rollRef.current && velRef.current)
-      velRef.current.scrollLeft = rollRef.current.scrollLeft;
-    else if (from === 'vel' && rollRef.current && velRef.current)
-      rollRef.current.scrollLeft = velRef.current.scrollLeft;
+    const src =
+      from === 'roll' ? rollRef.current : from === 'vel' ? velRef.current : rulerRef.current;
+    if (src) {
+      const sl = src.scrollLeft;
+      if (from !== 'roll' && rollRef.current) rollRef.current.scrollLeft = sl;
+      if (from !== 'vel' && velRef.current) velRef.current.scrollLeft = sl;
+      if (from !== 'ruler' && rulerRef.current) rulerRef.current.scrollLeft = sl;
+    }
     syncingRef.current = false;
+  }
+
+  /** Play the brick from a given beat (the header ▶ plays from 0). */
+  function playFrom(beat: number) {
+    engine.play(
+      [{ brick: brick!, loop: editorLoop, gain: 0.9 }],
+      brick!.bpm,
+      undefined,
+      Math.max(0, beat)
+    );
+  }
+
+  function onRulerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const beat = snapTo(
+      (e.clientX - rect.left + (rulerRef.current?.scrollLeft ?? 0)) / BEAT_W,
+      grid
+    );
+    setStartBeat(Math.max(0, beat));
+    playFrom(beat);
   }
 
   const scaleSet = useMemo(
@@ -203,7 +230,13 @@ export function PianoRoll({
       if (d.type === 'resize') {
         const o = d.origs.get(d.primaryId)!;
         const newDur = Math.max(grid, snapTo(c.beat - o.start, grid));
-        updateNote(brick.id, d.primaryId, { duration: newDur });
+        if (d.origs.size > 1) {
+          const patches: Record<string, Partial<Note>> = {};
+          for (const nid of d.origs.keys()) patches[nid] = { duration: newDur };
+          updateNotesBatch(brick.id, patches);
+        } else {
+          updateNote(brick.id, d.primaryId, { duration: newDur });
+        }
         setLastDur(newDur);
         return;
       }
@@ -345,12 +378,19 @@ export function PianoRoll({
     if (e.button !== 0) return;
 
     if (resize) {
+      // resizing a selected note resizes the whole selection to match
+      const group = selected.has(id) ? selected : new Set([id]);
+      const origs = new Map<string, Orig>();
+      for (const nid of group) {
+        const nn = brick!.notes.find((x) => x.id === nid);
+        if (nn) origs.set(nid, { start: nn.start, pitch: nn.pitch, duration: nn.duration });
+      }
       dragRef.current = {
         type: 'resize',
         primaryId: id,
         downBeat: 0,
         downRow: 0,
-        origs: new Map([[id, { start: n.start, pitch: n.pitch, duration: n.duration }]]),
+        origs,
         lastPreview: n.pitch,
         moved: false,
       };
@@ -682,6 +722,44 @@ export function PianoRoll({
         ＋ From brick
       </button>
     </div>
+
+    {/* ruler: click to play from that beat (⯈ marker shows the start point) */}
+    <div className="roll-ruler-wrap">
+      <div className="roll-ruler-gutter" title="Click the ruler to play from a point">
+        ⏱
+      </div>
+      <div className="roll-ruler-scroll" ref={rulerRef} onScroll={() => syncScroll('ruler')}>
+        <svg
+          width={width}
+          height={16}
+          className="roll-ruler"
+          onPointerDown={onRulerDown}
+          style={{ display: 'block' }}
+        >
+          {beatLines.map((b) => (
+            <g key={b}>
+              <line
+                x1={b * BEAT_W}
+                y1={b % 4 === 0 ? 4 : 9}
+                x2={b * BEAT_W}
+                y2={16}
+                stroke={b % 4 === 0 ? '#5a6473' : '#3a4150'}
+              />
+              {b % 4 === 0 && b < brick.lengthBeats && (
+                <text x={b * BEAT_W + 3} y={11} className="roll-ruler-label">
+                  {b / 4 + 1}
+                </text>
+              )}
+            </g>
+          ))}
+          <polygon
+            points={`${startBeat * BEAT_W - 4},2 ${startBeat * BEAT_W + 4},2 ${startBeat * BEAT_W},9`}
+            fill="#5ef2a0"
+          />
+        </svg>
+      </div>
+    </div>
+
     <div
       className="roll-scroll"
       tabIndex={0}

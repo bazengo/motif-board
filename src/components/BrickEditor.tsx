@@ -271,7 +271,9 @@ export function BrickEditor() {
                   a note to move · drag its <strong>right edge</strong> to resize
                   · drag empty space to <strong>box-select</strong> ·{' '}
                   <strong>shift-click</strong> to multi-select ·{' '}
-                  <strong>ctrl-drag</strong> to drag a copy ·{' '}
+                  <strong>ctrl-drag</strong> to drag a copy · drag a note's
+                  right edge to resize (resizes the whole selection) ·{' '}
+                  click the <strong>⏱ ruler</strong> to play from a point ·{' '}
                   <strong>Delete</strong> removes the selection ·{' '}
                   <strong>Ctrl+C/X/V</strong> copy, cut, paste. Green rows are
                   in-scale.
