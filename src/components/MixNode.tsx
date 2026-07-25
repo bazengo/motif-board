@@ -17,6 +17,8 @@ export function MixNode({ mix }: { mix: Mix }) {
   const deleteMix = useStore((s) => s.deleteMix);
 
   const updateLayer = useStore((s) => s.updateLayer);
+  const isSelected = useStore((s) => s.selection.mixes.includes(mix.id));
+  const toggleSelected = useStore((s) => s.toggleSelected);
   const activeTags = useStore((s) => s.activeTags);
   const members = mix.layers.length;
   const matches = matchesTags(tagsForMix(mix), activeTags);
@@ -109,11 +111,15 @@ export function MixNode({ mix }: { mix: Mix }) {
       className={
         'mix-node' +
         (active ? ' active' : '') +
+        (isSelected ? ' selected' : '') +
         (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
       }
       data-mix={mix.id}
       style={{ left: mix.board.x, top: mix.board.y, width: MIX_W, borderColor: mix.color }}
-      onPointerDown={() => setActiveMix(mix.id)}
+      onPointerDown={(e) => {
+        setActiveMix(mix.id);
+        toggleSelected('mix', mix.id, e.shiftKey || e.ctrlKey || e.metaKey);
+      }}
     >
       <div
         className="mix-node-handle"

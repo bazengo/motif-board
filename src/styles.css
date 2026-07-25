@@ -2006,3 +2006,83 @@
   border-style: dashed;
   opacity: 0.85;
 }
+
+/* ---------- Board selection ---------- */
+.board-marquee {
+  position: absolute;
+  border: 1px solid #ffd166;
+  background: rgba(255, 209, 102, 0.12);
+  pointer-events: none;
+  z-index: 35;
+  border-radius: 3px;
+}
+.brick-card.selected,
+.mix-node.selected {
+  outline: 2px solid #ffd166;
+  outline-offset: 2px;
+}
+
+/* ---------- Inspector ---------- */
+.insp-title {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.insp-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.insp-facts > div {
+  display: contents;
+}
+.insp-facts dt {
+  color: #7f8798;
+}
+.insp-facts dd {
+  margin: 0;
+  color: #e6e9ef;
+  overflow-wrap: anywhere;
+}
+.insp-preview {
+  margin-bottom: 12px;
+}
+.insp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.insp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #12151b;
+  border: 1px solid #2b303b;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.insp-name {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.insp-text {
+  font-size: 12px;
+  color: #cfd4de;
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+.danger-btn {
+  color: #ff8a8a;
+  border-color: #4a2b2b;
+}
+.danger-btn:hover {
+  background: #3a2626;
+}
+.mix-hint.small {
+  font-size: 11px;
+  margin-top: 8px;
+}

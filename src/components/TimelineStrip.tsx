@@ -67,6 +67,9 @@ export function TimelineStrip() {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       if (editorOpen || !selectedId) return;
+      // a board selection owns Delete while it exists
+      const sel = useStore.getState().selection;
+      if (sel.bricks.length + sel.mixes.length > 0) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       e.preventDefault();

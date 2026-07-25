@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
-import { descendantIds, familyIds } from './lib/lineage';
+import { descendantIds, familyIds, reparentAfterDelete } from './lib/lineage';
 import { bricksInGroup, mixesInGroup } from './lib/groups';
 import { debouncedStorage } from './lib/debouncedStorage';
 import { presetFromBrick, presetPatch } from './lib/presets';
@@ -144,6 +144,9 @@ interface AppState {
   clipboard: { dp: number; start: number; duration: number; velocity: number }[];
   /** Tag ids currently filtering the board (empty = show everything). */
   activeTags: string[];
+  /** Board selection, for the inspector and batch actions. Not persisted —
+   *  it's a view concern, and a stale selection on reload would be confusing. */
+  selection: { bricks: string[]; mixes: string[] };
   /** Board zoom factor. Board coordinates stay unscaled; this only affects
    *  rendering and client<->board conversion. */
   zoom: number;
@@ -222,6 +225,13 @@ interface AppState {
   /** Lay the board out in labelled columns by lineage, mix or tag. */
   sortBoard: (mode: SortMode) => void;
 
+  // selection + batch actions
+  setSelection: (sel: { bricks: string[]; mixes: string[] }) => void;
+  toggleSelected: (kind: 'brick' | 'mix', id: string, additive: boolean) => void;
+  clearSelection: () => void;
+  duplicateSelection: () => void;
+  deleteSelection: () => void;
+
   // instrument presets
   savePreset: (brickId: string, name: string) => string | null;
   applyPreset: (presetId: string, brickId: string) => void;
@@ -274,6 +284,7 @@ export const useStore = create<AppState>()(
       grid: 0.25,
       clipboard: [],
       activeTags: [],
+      selection: { bricks: [], mixes: [] },
       zoom: 1,
       editorLoop: true,
       noteLength: 1,
@@ -587,6 +598,128 @@ export const useStore = create<AppState>()(
           ),
         }));
       },
+
+      setSelection: (sel) => set({ selection: sel }),
+
+      toggleSelected: (kind, id, additive) =>
+        set((s) => {
+          const key = kind === 'brick' ? 'bricks' : 'mixes';
+          const cur = s.selection[key];
+          if (!additive) {
+            // plain click: select just this one
+            return {
+              selection:
+                cur.length === 1 && cur[0] === id
+                  ? s.selection
+                  : { bricks: [], mixes: [], [key]: [id] },
+            };
+          }
+          const next = cur.includes(id)
+            ? cur.filter((x) => x !== id)
+            : [...cur, id];
+          return { selection: { ...s.selection, [key]: next } };
+        }),
+
+      clearSelection: () =>
+        set((s) =>
+          s.selection.bricks.length === 0 && s.selection.mixes.length === 0
+            ? {}
+            : { selection: { bricks: [], mixes: [] } }
+        ),
+
+      /**
+       * Copy every selected brick and mix in one step. Mix layers are remapped
+       * onto the copied bricks where those were selected too, so duplicating a
+       * mix together with its members yields a self-contained copy rather than
+       * a second mix pointing at the originals.
+       */
+      duplicateSelection: () =>
+        set((s) => {
+          const { bricks: bIds, mixes: mIds } = s.selection;
+          if (bIds.length === 0 && mIds.length === 0) return {};
+
+          const idMap = new Map<string, string>();
+          const newBricks: Brick[] = [];
+          for (const id of bIds) {
+            const src = s.bricks.find((b) => b.id === id);
+            if (!src) continue;
+            const copy = cloneBrick(src, {
+              name: `${src.name} copy`,
+              parentId: src.parentId,
+              dx: 28,
+              dy: 28,
+            });
+            idMap.set(src.id, copy.id);
+            newBricks.push(copy);
+          }
+          // keep lineage inside the copied set: if a brick's parent was also
+          // copied, point the copy at the copied parent
+          for (const copy of newBricks) {
+            if (copy.parentId && idMap.has(copy.parentId)) {
+              copy.parentId = idMap.get(copy.parentId)!;
+            }
+          }
+
+          const newMixes: Mix[] = [];
+          for (const id of mIds) {
+            const src = s.mixes.find((m) => m.id === id);
+            if (!src) continue;
+            newMixes.push({
+              ...src,
+              id: nanoid(8),
+              name: `${src.name} copy`,
+              board: { x: src.board.x + 28, y: src.board.y + 28 },
+              layers: src.layers.map((l) => ({
+                ...l,
+                brickId: idMap.get(l.brickId) ?? l.brickId,
+                automation: l.automation ? [...l.automation] : undefined,
+              })),
+            });
+          }
+
+          return {
+            bricks: [...s.bricks, ...newBricks],
+            mixes: [...s.mixes, ...newMixes],
+            selection: {
+              bricks: newBricks.map((b) => b.id),
+              mixes: newMixes.map((m) => m.id),
+            },
+          };
+        }),
+
+      /** Remove every selected brick and mix, cleaning up all references. */
+      deleteSelection: () =>
+        set((s) => {
+          const dropB = new Set(s.selection.bricks);
+          const dropM = new Set(s.selection.mixes);
+          if (dropB.size === 0 && dropM.size === 0) return {};
+
+          const reparented = reparentAfterDelete(s.bricks, dropB);
+
+          const mixes = s.mixes
+            .filter((m) => !dropM.has(m.id))
+            .map((m) => ({
+              ...m,
+              layers: m.layers.filter((l) => !dropB.has(l.brickId)),
+            }));
+
+          return {
+            bricks: reparented,
+            mixes,
+            timeline: s.timeline.filter((t) => !dropM.has(t.mixId)),
+            selection: { bricks: [], mixes: [] },
+            activeMixId:
+              s.activeMixId && dropM.has(s.activeMixId) ? null : s.activeMixId,
+            selectedBrickId:
+              s.selectedBrickId && dropB.has(s.selectedBrickId)
+                ? null
+                : s.selectedBrickId,
+            editorOpen:
+              s.selectedBrickId && dropB.has(s.selectedBrickId)
+                ? false
+                : s.editorOpen,
+          };
+        }),
 
       sortBoard: (mode) =>
         set((s) => {

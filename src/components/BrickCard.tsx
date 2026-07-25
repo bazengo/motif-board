@@ -31,6 +31,8 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const playhead = useBrickPlayhead(brick.id);
   const groups = useStore((s) => s.groups);
   const allBricks = useStore((s) => s.bricks);
+  const isSelected = useStore((s) => s.selection.bricks.includes(brick.id));
+  const toggleSelected = useStore((s) => s.toggleSelected);
   // tag lookup parses #hashtags with a regex, so don't redo it every render
   const myTags = useMemo(
     () => tagsForBrick(brick, mixes, groups, allBricks),
@@ -172,9 +174,13 @@ export function BrickCard({ brick }: { brick: Brick }) {
     <div
       className={
         'brick-card' +
+        (isSelected ? ' selected' : '') +
         (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
       }
       data-brick={brick.id}
+      onPointerDown={(e) =>
+        toggleSelected('brick', brick.id, e.shiftKey || e.ctrlKey || e.metaKey)
+      }
       style={{
         left: brick.board.x,
         top: brick.board.y,

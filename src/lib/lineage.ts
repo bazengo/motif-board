@@ -46,6 +46,29 @@ export function lineageRoots(bricks: Brick[]): Brick[] {
   return bricks.filter((b) => (counts.get(b.id) ?? 0) > 1);
 }
 
+/**
+ * Survivors of a deletion, with orphans adopted by their nearest surviving
+ * ancestor. Removing a middle link should shorten a chain, not shatter it —
+ * and deleting a whole run of ancestors at once has to skip past all of them.
+ */
+export function reparentAfterDelete(
+  bricks: Brick[],
+  deleted: Set<string>
+): Brick[] {
+  const byId = new Map(bricks.map((b) => [b.id, b]));
+  return bricks
+    .filter((b) => !deleted.has(b.id))
+    .map((b) => {
+      let p = b.parentId;
+      const seen = new Set<string>();
+      while (p && deleted.has(p) && !seen.has(p)) {
+        seen.add(p);
+        p = byId.get(p)?.parentId ?? null;
+      }
+      return p === b.parentId ? b : { ...b, parentId: p ?? null };
+    });
+}
+
 /** All bricks connected to `id` through parent/child links (the whole lineage
  *  tree it belongs to), including `id` itself. */
 export function familyIds(bricks: Brick[], id: string): Set<string> {

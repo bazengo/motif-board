@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildColumns, arrangeBoard } from '../arrange';
-import { rootOf, lineageRoots } from '../lineage';
+import { rootOf, lineageRoots, reparentAfterDelete } from '../lineage';
 import { testBrick, testMix, testLayer } from './fixtures';
 
 describe('rootOf', () => {
@@ -118,5 +118,39 @@ describe('arrangeBoard', () => {
     const one = arrangeBoard([a], [], 'root');
     const two = arrangeBoard([a, b], [], 'root');
     expect(two.frames[0].board.h).toBeGreaterThan(one.frames[0].board.h);
+  });
+});
+
+describe('reparentAfterDelete', () => {
+  it('adopts orphans to the grandparent when a middle link goes', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const c = testBrick({ parentId: b.id });
+    const out = reparentAfterDelete([a, b, c], new Set([b.id]));
+    expect(out.map((x) => x.id)).toEqual([a.id, c.id]);
+    expect(out.find((x) => x.id === c.id)!.parentId).toBe(a.id);
+  });
+
+  it('skips past a whole run of deleted ancestors', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const c = testBrick({ parentId: b.id });
+    const d = testBrick({ parentId: c.id });
+    const out = reparentAfterDelete([a, b, c, d], new Set([b.id, c.id]));
+    expect(out.find((x) => x.id === d.id)!.parentId).toBe(a.id);
+  });
+
+  it('orphans a child when the whole line above it is deleted', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const out = reparentAfterDelete([a, b], new Set([a.id]));
+    expect(out.find((x) => x.id === b.id)!.parentId).toBeNull();
+  });
+
+  it('leaves untouched bricks as the same objects', () => {
+    const a = testBrick();
+    const b = testBrick();
+    const out = reparentAfterDelete([a, b], new Set([b.id]));
+    expect(out[0]).toBe(a);
   });
 });

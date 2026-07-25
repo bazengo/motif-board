@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { BrickCard } from './BrickCard';
 import { MixNode } from './MixNode';
@@ -19,6 +19,11 @@ export function Board() {
   const zoom = useStore((s) => s.zoom);
   const setZoom = useStore((s) => s.setZoom);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const setSelection = useStore((s) => s.setSelection);
+  const clearSelection = useStore((s) => s.clearSelection);
+  const [marquee, setMarquee] = useState<
+    { x0: number; y0: number; x1: number; y1: number } | null
+  >(null);
 
   // Ctrl/⌘ + wheel zooms around the cursor. Registered manually so it can be
   // non-passive and therefore preventDefault the browser's page zoom.
@@ -115,6 +120,66 @@ export function Board() {
 
   const empty = bricks.length === 0 && mixes.length === 0;
 
+  /**
+   * Left-drag on empty board space rubber-bands a selection. Hit-testing uses
+   * the real element boxes rather than stored positions, so it stays correct
+   * with cards that size to their contents, and at any zoom.
+   */
+  function onMarqueeDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    const t = e.target as HTMLElement;
+    if (!t.classList.contains('board') && !t.classList.contains('board-scaled'))
+      return;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (!additive) clearSelection();
+    const start = clientToBoard(e.clientX, e.clientY);
+    let moved = false;
+
+    const move = (ev: PointerEvent) => {
+      const p = clientToBoard(ev.clientX, ev.clientY);
+      if (!moved && Math.abs(p.x - start.x) < 4 && Math.abs(p.y - start.y) < 4)
+        return;
+      moved = true;
+      const rect = {
+        x0: Math.min(start.x, p.x),
+        y0: Math.min(start.y, p.y),
+        x1: Math.max(start.x, p.x),
+        y1: Math.max(start.y, p.y),
+      };
+      setMarquee(rect);
+
+      const hitBricks: string[] = [];
+      const hitMixes: string[] = [];
+      document.querySelectorAll('[data-brick],[data-mix]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const a = clientToBoard(r.left, r.top);
+        const b = clientToBoard(r.right, r.bottom);
+        if (a.x > rect.x1 || b.x < rect.x0 || a.y > rect.y1 || b.y < rect.y0)
+          return;
+        const id = (el as HTMLElement).dataset;
+        if (id.brick) hitBricks.push(id.brick);
+        else if (id.mix) hitMixes.push(id.mix);
+      });
+
+      const base = additive
+        ? useStore.getState().selection
+        : { bricks: [], mixes: [] };
+      setSelection({
+        bricks: [...new Set([...base.bricks, ...hitBricks])],
+        mixes: [...new Set([...base.mixes, ...hitMixes])],
+      });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      setMarquee(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
   /** Middle-drag anywhere on the board (including over cards) to pan. */
   function onBoardPointerDown(e: React.PointerEvent) {
     if (e.button !== 1) return;
@@ -199,7 +264,10 @@ export function Board() {
       className="board"
       ref={boardRef}
       onDoubleClick={onBoardDoubleClick}
-      onPointerDown={onBoardPointerDown}
+      onPointerDown={(e) => {
+        onBoardPointerDown(e);
+        onMarqueeDown(e);
+      }}
       // suppress Windows' middle-click autoscroll and Linux middle-click paste
       onMouseDown={(e) => {
         if (e.button === 1) e.preventDefault();
@@ -244,6 +312,18 @@ export function Board() {
       {groups.map((g) => (
         <GroupFrame key={g.id} group={g} />
       ))}
+
+      {marquee && (
+        <div
+          className="board-marquee"
+          style={{
+            left: marquee.x0,
+            top: marquee.y0,
+            width: marquee.x1 - marquee.x0,
+            height: marquee.y1 - marquee.y0,
+          }}
+        />
+      )}
 
       {(lineage.length > 0 || mixEdges.length > 0 || linking) && (
         <svg className="board-links" width={maxX} height={maxY}>

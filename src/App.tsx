@@ -12,7 +12,7 @@ import {
   onHistory,
 } from './history';
 import { Board } from './components/Board';
-import { MixPanel } from './components/MixPanel';
+import { Inspector } from './components/Inspector';
 import { BrickEditor } from './components/BrickEditor';
 import { MidiSelector } from './components/MidiSelector';
 import { TimelineStrip } from './components/TimelineStrip';
@@ -65,6 +65,14 @@ function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        // board selection only — the editor and timeline own Delete when
+        // they're the thing being worked on
+        const st = useStore.getState();
+        if (st.editorOpen) return;
+        if (st.selection.bricks.length + st.selection.mixes.length === 0) return;
+        e.preventDefault();
+        st.deleteSelection();
       }
     }
     window.addEventListener('keydown', onKey);
@@ -203,7 +211,7 @@ function App() {
           <TimelineStrip />
         </div>
         <aside className="sidebar">
-          <MixPanel />
+          <Inspector />
         </aside>
       </div>
 
