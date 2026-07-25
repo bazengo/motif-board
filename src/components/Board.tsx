@@ -132,6 +132,11 @@ export function Board() {
       return;
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     if (!additive) clearSelection();
+    // rubber-banding across cards would otherwise smear a text selection over
+    // their names and notes
+    e.preventDefault();
+    const board = e.currentTarget as HTMLDivElement;
+    board.classList.add('selecting');
     const start = clientToBoard(e.clientX, e.clientY);
     let moved = false;
 
@@ -173,6 +178,7 @@ export function Board() {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      board.classList.remove('selecting');
       setMarquee(null);
     };
     window.addEventListener('pointermove', move);

@@ -119,6 +119,14 @@
   cursor: grabbing;
   user-select: none;
 }
+/* rubber-band select drags across cards; don't highlight their text */
+.board.selecting,
+.board.selecting * {
+  user-select: none;
+}
+.board.selecting {
+  cursor: crosshair;
+}
 .board {
   position: relative;
   flex: 1;
