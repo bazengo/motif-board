@@ -67,7 +67,9 @@ export function GroupFrame({ group }: { group: Group }) {
   return (
     <div
       className={
-        'group-frame' + (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
+        'group-frame' +
+        (group.autoKey ? ' auto' : '') +
+        (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
       }
       style={{
         left: group.board.x,

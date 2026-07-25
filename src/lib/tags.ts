@@ -1,5 +1,6 @@
 import type { Brick, Group, Mix } from '../types';
 import { groupsForBrick } from './groups';
+import { rootOf, lineageRoots } from './lineage';
 
 // Tags come from two places:
 //  - #hashtags typed into a brick's process notes or a mix's notes
@@ -9,7 +10,7 @@ export interface Tag {
   id: string; // "#verse" or "mix:<id>"
   label: string;
   color: string;
-  kind: 'text' | 'mix' | 'group';
+  kind: 'text' | 'mix' | 'group' | 'root';
 }
 
 const TEXT_TAG_COLOR = '#8ecae6';
@@ -48,7 +49,14 @@ export function allTags(
   groups: Group[] = []
 ): Tag[] {
   const tags: Tag[] = [
-    ...groups.map((g) => ({
+    // one per lineage that has more than a single brick
+    ...lineageRoots(bricks).map((b) => ({
+      id: `root:${b.id}`,
+      label: b.name,
+      color: b.color,
+      kind: 'root' as const,
+    })),
+    ...groups.filter((g) => !g.autoKey).map((g) => ({
       id: `group:${g.id}`,
       label: g.name,
       color: g.color,
@@ -82,11 +90,15 @@ export function allTags(
 export function tagsForBrick(
   brick: Brick,
   mixes: Mix[],
-  groups: Group[] = []
+  groups: Group[] = [],
+  /** Needed to resolve the lineage-root tag; omit to skip it. */
+  allBricks: Brick[] = []
 ): Tag[] {
   // a brick inherits the tags of any group it sits in, including that group's
   // own hashtags
-  const out: Tag[] = groupsForBrick(brick, groups).flatMap((g) => [
+  const out: Tag[] = groupsForBrick(brick, groups)
+    .filter((g) => !g.autoKey)
+    .flatMap((g) => [
     { id: `group:${g.id}`, label: g.name, color: g.color, kind: 'group' as const },
     ...parseHashtags(g.notes ?? '').map((t) => ({
       id: `#${t}`,
@@ -105,10 +117,25 @@ export function tagsForBrick(
         kind: 'mix' as const,
       }))
   );
+  const rootTag = allBricks.length ? rootTagForBrick(brick, allBricks) : null;
+  if (rootTag) out.push(rootTag);
   for (const t of brickTextTags(brick)) {
     out.push({ id: `#${t}`, label: `#${t}`, color: TEXT_TAG_COLOR, kind: 'text' });
   }
   return out;
+}
+
+/** Lineage-root tag for a brick, when it belongs to a lineage of more than one. */
+export function rootTagForBrick(
+  brick: Brick,
+  bricks: Brick[]
+): Tag | null {
+  const rootId = rootOf(bricks, brick.id);
+  const root = bricks.find((b) => b.id === rootId);
+  if (!root) return null;
+  const family = bricks.filter((b) => rootOf(bricks, b.id) === rootId);
+  if (family.length < 2) return null;
+  return { id: `root:${root.id}`, label: root.name, color: root.color, kind: 'root' };
 }
 
 export function tagsForMix(mix: Mix): Tag[] {

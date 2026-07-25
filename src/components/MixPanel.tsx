@@ -136,10 +136,11 @@ export function MixPanel() {
       <div className="mix-layers">
         {rows.map(({ l, brick }) => (
           <div className="mix-layer" key={l.brickId}>
-            <span className="mix-dot" style={{ background: brick!.color }} />
-            <span className="mix-name" title={brick!.name}>
-              {brick!.name}
-            </span>
+            {/* name on its own line so long ones aren't truncated */}
+            <div className="mix-layer-head">
+              <span className="mix-dot" style={{ background: brick!.color }} />
+              <span className="mix-name">{brick!.name}</span>
+            </div>
             <div className="mix-buttons">
               <button
                 className="tag-btn"

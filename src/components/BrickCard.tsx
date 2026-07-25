@@ -30,10 +30,11 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const d = brick.display;
   const playhead = useBrickPlayhead(brick.id);
   const groups = useStore((s) => s.groups);
+  const allBricks = useStore((s) => s.bricks);
   // tag lookup parses #hashtags with a regex, so don't redo it every render
   const myTags = useMemo(
-    () => tagsForBrick(brick, mixes, groups),
-    [brick, mixes, groups]
+    () => tagsForBrick(brick, mixes, groups, allBricks),
+    [brick, mixes, groups, allBricks]
   );
   const matches = matchesTags(myTags, activeTags);
   const filtering = activeTags.length > 0;

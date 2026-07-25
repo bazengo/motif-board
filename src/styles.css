@@ -1089,8 +1089,9 @@
 }
 .mix-layer {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   background: #12151b;
   border: 1px solid #2b303b;
   border-radius: 8px;
@@ -1137,12 +1138,17 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
+.mix-layer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .mix-name {
   flex: 1;
   font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* wrap rather than truncate — full names matter here */
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 .mix-buttons {
   display: flex;
@@ -1969,4 +1975,34 @@
 .mix-node-flag.on.solo {
   background: #ffd166;
   color: #16181d;
+}
+
+/* ---------- Board sorting ---------- */
+.sort-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.sort-label {
+  font-size: 11px;
+  color: #7f8798;
+  margin-right: 4px;
+}
+.sort-btn {
+  background: #262b36;
+  border: 1px solid #363d4b;
+  color: #cfd4de;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+}
+.sort-btn:hover {
+  background: #2f3542;
+  color: #fff;
+}
+/* generated layout frames read as scaffolding, not user-made groups */
+.group-frame.auto {
+  border-style: dashed;
+  opacity: 0.85;
 }

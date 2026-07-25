@@ -210,6 +210,9 @@ export interface Group {
   id: string;
   name: string;
   color: string;
+  /** Set when a sort generated this frame, so re-sorting reuses it rather
+   *  than piling up duplicates. Auto frames don't act as tags. */
+  autoKey?: string;
   board: { x: number; y: number; w: number; h: number };
   notes: string;
 }

@@ -5,6 +5,7 @@ import { descendantIds, familyIds } from './lib/lineage';
 import { bricksInGroup, mixesInGroup } from './lib/groups';
 import { debouncedStorage } from './lib/debouncedStorage';
 import { presetFromBrick, presetPatch } from './lib/presets';
+import { arrangeBoard, type SortMode } from './lib/arrange';
 import {
   type Brick,
   type Mix,
@@ -218,6 +219,8 @@ interface AppState {
     carry?: { brickIds: string[]; mixIds: string[] }
   ) => void;
   resizeGroup: (id: string, w: number, h: number) => void;
+  /** Lay the board out in labelled columns by lineage, mix or tag. */
+  sortBoard: (mode: SortMode) => void;
 
   // instrument presets
   savePreset: (brickId: string, name: string) => string | null;
@@ -584,6 +587,41 @@ export const useStore = create<AppState>()(
           ),
         }));
       },
+
+      sortBoard: (mode) =>
+        set((s) => {
+          const { positions, frames } = arrangeBoard(s.bricks, s.mixes, mode);
+          // reuse frames from a previous sort so re-running doesn't pile up
+          const byKey = new Map(
+            s.groups.filter((g) => g.autoKey).map((g) => [g.autoKey!, g])
+          );
+          const wanted = new Set(frames.map((f) => f.autoKey));
+          const kept = s.groups.filter((g) => !g.autoKey);
+          const autos = frames.map((f) => {
+            const existing = byKey.get(f.autoKey);
+            return existing
+              ? { ...existing, name: f.name, color: f.color, board: f.board }
+              : {
+                  id: nanoid(8),
+                  name: f.name,
+                  color: f.color,
+                  autoKey: f.autoKey,
+                  board: f.board,
+                  notes: '',
+                };
+          });
+          // drop auto frames from an earlier sort that no longer apply
+          void wanted;
+          return {
+            bricks: s.bricks.map((b) =>
+              positions[b.id]
+                ? { ...b, board: { ...b.board, ...positions[b.id] } }
+                : b
+            ),
+            // frames render behind cards, so put them first
+            groups: [...autos, ...kept],
+          };
+        }),
 
       resizeGroup: (id, w, h) =>
         set((s) => ({

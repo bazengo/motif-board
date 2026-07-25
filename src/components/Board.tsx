@@ -58,7 +58,7 @@ export function Board() {
     return {
       bricks: new Set(
         bricks
-          .filter((b) => matchesTags(tagsForBrick(b, mixes, groups), activeTags))
+          .filter((b) => matchesTags(tagsForBrick(b, mixes, groups, bricks), activeTags))
           .map((b) => b.id)
       ),
       mixes: new Set(
