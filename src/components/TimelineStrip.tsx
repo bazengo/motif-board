@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportTimeline } from '../lib/midi';
@@ -77,22 +77,42 @@ export function TimelineStrip() {
     return () => window.removeEventListener('keydown', onKey);
   }, [editorOpen, selectedId, removeSection]);
 
-  const plan = buildTimelinePlan(timeline, mixes, bricks, globalBpm);
+  // Flattening walks every section/repeat/layer/note and sorts the result, and
+  // the playhead re-renders this component ~60x a second during playback — so
+  // it must not be rebuilt per frame.
+  const plan = useMemo(
+    () => buildTimelinePlan(timeline, mixes, bricks, globalBpm),
+    [timeline, mixes, bricks, globalBpm]
+  );
   const totalWidth = Math.max(320, plan.totalSeconds * pxPerSec);
 
   // one shared pitch range keeps every section's preview on the same scale,
   // so a bass part visibly sits below a lead
-  let minPitch = Infinity;
-  let maxPitch = -Infinity;
-  for (const n of plan.notes) {
-    minPitch = Math.min(minPitch, n.pitch);
-    maxPitch = Math.max(maxPitch, n.pitch);
-  }
-  if (!Number.isFinite(minPitch)) {
-    minPitch = 48;
-    maxPitch = 72;
-  }
-  const span = Math.max(6, maxPitch - minPitch + 2);
+  const { minPitch, span } = useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const n of plan.notes) {
+      lo = Math.min(lo, n.pitch);
+      hi = Math.max(hi, n.pitch);
+    }
+    if (!Number.isFinite(lo)) {
+      lo = 48;
+      hi = 72;
+    }
+    return { minPitch: lo, span: Math.max(6, hi - lo + 2) };
+  }, [plan]);
+
+  // bucket notes per section once, rather than re-filtering the whole plan for
+  // every block on every frame of playback
+  const notesBySection = useMemo(() => {
+    const buckets: (typeof plan.notes)[] = plan.starts.map(() => []);
+    for (const n of plan.notes) {
+      let i = plan.starts.length - 1;
+      while (i > 0 && n.time < plan.starts[i]) i--;
+      buckets[i]?.push(n);
+    }
+    return buckets;
+  }, [plan]);
 
   // ruler step that keeps labels ~60px apart
   const step =
@@ -374,9 +394,7 @@ export function TimelineStrip() {
                   const end = plan.starts[i + 1] ?? plan.totalSeconds;
                   const dur = Math.max(0.001, end - start);
                   const w = Math.max(6, dur * pxPerSec);
-                  const notes = plan.notes.filter(
-                    (n) => n.time >= start && n.time < end
-                  );
+                  const notes = notesBySection[i] ?? [];
                   return (
                     <div
                       key={section.id}

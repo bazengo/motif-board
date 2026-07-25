@@ -46,6 +46,9 @@ const PART_LEAD = 0.08; // seconds
  */
 const START_DELAY = 0.2; // seconds
 
+/** Cap on cached audition voices (see AudioEngine.preview). */
+const MAX_PREVIEW_SYNTHS = 8;
+
 /** Percussion bricks always use the drum kit, whatever instrument is set. */
 function makeVoiceFor(brick: Brick): Voiceable {
   return brick.percussion
@@ -108,18 +111,6 @@ function envSignature(brick: Brick): string {
   return `${brick.instrument}:${e.attack},${e.decay},${e.sustain},${e.release}`;
 }
 
-function brickSignature(brick: Brick): string {
-  return (
-    envSignature(brick) +
-    '|' +
-    brick.lengthBeats +
-    '|' +
-    brick.notes
-      .map((n) => `${n.pitch},${n.start},${n.duration},${n.velocity}`)
-      .join(';')
-  );
-}
-
 interface Voice {
   brickId: string;
   synth: Voiceable | null; // null when monitoring is off (MIDI-only)
@@ -141,7 +132,8 @@ interface Voice {
   loop: boolean;
   lengthBeats: number;
   level: number; // current effective gain (0 = muted/not soloed)
-  sig: string;
+  /** Last brick object seen; reference equality detects edits in O(1). */
+  srcBrick: Brick | null;
 }
 
 type PlayItem = {
@@ -166,7 +158,8 @@ class AudioEngine {
   private endTimer: number | null = null;
   private currentBpm = 120;
   private usedChannels = new Set<number>();
-  private previewSynths = new Map<string, Voiceable>();
+  /** LRU of audition voices; the key includes the envelope, so it must be capped. */
+  private previewSynths = new Map<string, { node: Voiceable; vol: Tone.Volume }>();
   private activeMixId: string | null = null;
   private clickSynth: Tone.MembraneSynth | null = null;
   private metroId: number | null = null;
@@ -431,7 +424,7 @@ class AudioEngine {
       loop,
       lengthBeats: brick.lengthBeats,
       level: gain,
-      sig: brickSignature(brick),
+      srcBrick: brick,
     };
 
     const part = this.makePart(voice, buildEvents(brick, secPerBeat));
@@ -594,7 +587,7 @@ class AudioEngine {
         loop: false,
         lengthBeats: brick.lengthBeats,
         level: 1,
-        sig: brickSignature(brick),
+        srcBrick: brick,
       };
 
       const part = this.makePart(
@@ -648,12 +641,16 @@ class AudioEngine {
   syncLive(bricks: Brick[]) {
     if (this.voices.size === 0) return;
     const secPerBeat = 60 / this.currentBpm;
+    const byId = new Map(bricks.map((b) => [b.id, b]));
     for (const voice of this.voices.values()) {
-      const brick = bricks.find((b) => b.id === voice.brickId);
+      const brick = byId.get(voice.brickId);
       if (!brick) continue;
-      const sig = brickSignature(brick);
-      if (sig === voice.sig) continue;
-      voice.sig = sig;
+      // The store updates immutably, so an unchanged brick is the same object.
+      // This runs on every store change (including 60fps drags), so it can't
+      // afford to build a string over every note just to detect a change.
+      if (brick === voice.srcBrick) continue;
+      const prev = voice.srcBrick;
+      voice.srcBrick = brick;
 
       // rebuild the voice when the instrument OR its envelope changes, so
       // envelope tweaks are audible without restarting playback
@@ -665,6 +662,10 @@ class AudioEngine {
         voice.instrument = brick.instrument;
         voice.envSig = nextEnvSig;
       }
+
+      // nothing rhythmic changed (a rename, a colour, a tag) — leave the part
+      if (prev && prev.notes === brick.notes && prev.lengthBeats === brick.lengthBeats)
+        continue;
 
       if (brick.lengthBeats !== voice.lengthBeats) {
         // Rebuild the Part — a running looping Part doesn't reliably honour a
@@ -822,14 +823,30 @@ class AudioEngine {
     const key = percussion
       ? 'drums'
       : `${instrument}:${env.attack},${env.decay},${env.sustain},${env.release}`;
-    let synth = this.previewSynths.get(key);
-    if (!synth) {
+    let entry = this.previewSynths.get(key);
+    if (!entry) {
       const vol = new Tone.Volume(gainToDb(gain)).toDestination();
-      synth = (percussion ? new DrumKit() : makeSynth(instrument, env)).connect(
-        vol
-      );
-      this.previewSynths.set(key, synth);
+      const node = (
+        percussion ? new DrumKit() : makeSynth(instrument, env)
+      ).connect(vol);
+      entry = { node, vol };
+      this.previewSynths.set(key, entry);
+      // The key includes the envelope, so dragging the envelope editor would
+      // otherwise mint a new synth (and volume node) per micro-change and
+      // never release them. Keep a small LRU and dispose what falls out.
+      while (this.previewSynths.size > MAX_PREVIEW_SYNTHS) {
+        const oldest = this.previewSynths.keys().next().value as string;
+        const dead = this.previewSynths.get(oldest);
+        this.previewSynths.delete(oldest);
+        dead?.node.dispose();
+        dead?.vol.dispose();
+      }
+    } else {
+      // refresh recency
+      this.previewSynths.delete(key);
+      this.previewSynths.set(key, entry);
     }
+    const synth = entry.node;
     if (synth instanceof DrumKit) synth.triggerAttackRelease(pitch, 0.3);
     else synth.triggerAttackRelease(midiToName(pitch), 0.3);
 
@@ -861,11 +878,9 @@ class AudioEngine {
     this.paused = false;
     this.stopMetronome();
     this.allNotesOff();
-    for (const v of this.voices.values()) {
-      v.part.dispose();
-      v.synth?.dispose();
-      v.volume?.dispose();
-    }
+    // disposeVoice also clears the automation schedule and its volume node —
+    // disposing inline here used to leak one Tone.Volume per layer per stop
+    for (const v of this.voices.values()) this.disposeVoice(v);
     this.voices.clear();
     this.usedChannels.clear();
     this.activeMixId = null;

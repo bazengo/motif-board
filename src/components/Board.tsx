@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../store';
 import { BrickCard } from './BrickCard';
 import { MixNode } from './MixNode';
@@ -50,10 +50,24 @@ export function Board() {
   // an edge is only "in view" when both of its endpoints match the tag filter,
   // otherwise it hangs about at full strength over dimmed cards
   const filtering = activeTags.length > 0;
-  const brickMatches = (b: Brick) =>
-    !filtering || matchesTags(tagsForBrick(b, mixes, groups), activeTags);
-  const mixMatches = (m: Mix) =>
-    !filtering || matchesTags(tagsForMix(m), activeTags);
+  // Resolve tag matches once per data change. This parses #hashtags with a
+  // regex per brick, and the board re-renders every frame while a link is
+  // being dragged — so it must not run per render.
+  const matchSets = useMemo(() => {
+    if (activeTags.length === 0) return null;
+    return {
+      bricks: new Set(
+        bricks
+          .filter((b) => matchesTags(tagsForBrick(b, mixes, groups), activeTags))
+          .map((b) => b.id)
+      ),
+      mixes: new Set(
+        mixes.filter((m) => matchesTags(tagsForMix(m), activeTags)).map((m) => m.id)
+      ),
+    };
+  }, [bricks, mixes, groups, activeTags]);
+  const brickMatches = (b: Brick) => !matchSets || matchSets.bricks.has(b.id);
+  const mixMatches = (m: Mix) => !matchSets || matchSets.mixes.has(m.id);
   const edgeOpacity = (on: boolean) => (filtering && !on ? 0.12 : 1);
   // the live drag line starts at a brick card, or a mix node when dragging a
   // mix down to the timeline

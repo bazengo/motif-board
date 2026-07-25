@@ -29,6 +29,11 @@ export function useRecorder(brickId: string) {
 
   // pitch -> beat position where the note started
   const pending = useRef(new Map<number, number>());
+  const countInTimers = useRef<number[]>([]);
+  const clearCountIn = useCallback(() => {
+    for (const t of countInTimers.current) clearTimeout(t);
+    countInTimers.current = [];
+  }, []);
   const recordingRef = useRef(false);
   const quantizeRef = useRef(quantizeInput);
   recordingRef.current = recording;
@@ -123,11 +128,15 @@ export function useRecorder(brickId: string) {
   }, [octave]);
 
   const stop = useCallback(() => {
+    clearCountIn();
     setRecording(false);
     setCountdown(null);
     pending.current.clear();
     engine.stop();
-  }, []);
+  }, [clearCountIn]);
+
+  // never leave a pending count-in behind when the editor closes
+  useEffect(() => clearCountIn, [clearCountIn]);
 
   const start = useCallback(async () => {
     const st = useStore.getState();
@@ -178,14 +187,21 @@ export function useRecorder(brickId: string) {
     // count in one bar at the brick's tempo and time signature
     const beats = brick.timeSig?.num ?? 4;
     const msPerBeat = (60 / brick.bpm) * 1000;
+    // tracked so stopping (or closing the editor) mid-count-in doesn't leave
+    // timers that later start playback on their own
+    clearCountIn();
     for (let i = 0; i < beats; i++) {
-      setTimeout(() => {
-        setCountdown(beats - i);
-        engine.metronomeClick(i === 0);
-      }, i * msPerBeat);
+      countInTimers.current.push(
+        window.setTimeout(() => {
+          setCountdown(beats - i);
+          engine.metronomeClick(i === 0);
+        }, i * msPerBeat)
+      );
     }
-    setTimeout(begin, beats * msPerBeat);
-  }, [brickId, countIn, backing, metronome]);
+    countInTimers.current.push(
+      window.setTimeout(begin, beats * msPerBeat)
+    );
+  }, [brickId, countIn, backing, metronome, clearCountIn]);
 
   return {
     octave,

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import { descendantIds, familyIds } from './lib/lineage';
 import { bricksInGroup, mixesInGroup } from './lib/groups';
+import { debouncedStorage } from './lib/debouncedStorage';
 import {
   type Brick,
   type Mix,
@@ -824,6 +825,8 @@ export const useStore = create<AppState>()(
         state.groups = state.groups ?? [];
         return state as never;
       },
+      // writes are coalesced; see debouncedStorage for why
+      storage: debouncedStorage,
       partialize: (s) => ({
         bricks: s.bricks,
         globalBpm: s.globalBpm,

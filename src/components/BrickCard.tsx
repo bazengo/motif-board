@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
@@ -30,7 +30,11 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const d = brick.display;
   const playhead = useBrickPlayhead(brick.id);
   const groups = useStore((s) => s.groups);
-  const myTags = tagsForBrick(brick, mixes, groups);
+  // tag lookup parses #hashtags with a regex, so don't redo it every render
+  const myTags = useMemo(
+    () => tagsForBrick(brick, mixes, groups),
+    [brick, mixes, groups]
+  );
   const matches = matchesTags(myTags, activeTags);
   const filtering = activeTags.length > 0;
 
@@ -146,11 +150,15 @@ export function BrickCard({ brick }: { brick: Brick }) {
     window.addEventListener('blur', cancel);
   }
 
-  // eligible new parents: not self, not a descendant (avoid cycles)
-  const descendants = descendantIds(useStore.getState().bricks, brick.id);
-  const parentCandidates = useStore
-    .getState()
-    .bricks.filter((b) => b.id !== brick.id && !descendants.has(b.id));
+  // Eligible new parents: not self, not a descendant (avoid cycles). Only
+  // needed while the lineage menu is open — computing it on every render meant
+  // every card walked the whole lineage graph on every board update.
+  const parentCandidates = useMemo(() => {
+    if (menu !== 'parent') return [];
+    const all = useStore.getState().bricks;
+    const descendants = descendantIds(all, brick.id);
+    return all.filter((b) => b.id !== brick.id && !descendants.has(b.id));
+  }, [menu, brick.id]);
 
   // Un-rotate menus so they read vertically even on a tilted card.
   const menuStyle: React.CSSProperties = {
