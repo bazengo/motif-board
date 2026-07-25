@@ -52,8 +52,38 @@ export function BrickCard({ brick }: { brick: Brick }) {
     const offX = p0.x - brick.board.x;
     const offY = p0.y - brick.board.y;
     (e.target as Element).setPointerCapture(e.pointerId);
+
+    // Dragging anything in a multi-selection carries the whole selection.
+    // Start positions are captured up front so the group keeps its shape
+    // instead of drifting from accumulated deltas.
+    const st = useStore.getState();
+    const group =
+      st.selection.bricks.includes(brick.id) &&
+      st.selection.bricks.length + st.selection.mixes.length > 1
+        ? {
+            bricks: st.bricks
+              .filter((b) => st.selection.bricks.includes(b.id))
+              .map((b) => ({ id: b.id, x: b.board.x, y: b.board.y })),
+            mixes: st.mixes
+              .filter((m) => st.selection.mixes.includes(m.id))
+              .map((m) => ({ id: m.id, x: m.board.x, y: m.board.y })),
+          }
+        : null;
+
     const move = (ev: PointerEvent) => {
       const p = clientToBoard(ev.clientX, ev.clientY);
+      if (group) {
+        const dx = p.x - p0.x;
+        const dy = p.y - p0.y;
+        const bp: Record<string, { x: number; y: number }> = {};
+        const mp: Record<string, { x: number; y: number }> = {};
+        for (const b of group.bricks)
+          bp[b.id] = { x: Math.max(0, b.x + dx), y: Math.max(0, b.y + dy) };
+        for (const m of group.mixes)
+          mp[m.id] = { x: Math.max(0, m.x + dx), y: Math.max(0, m.y + dy) };
+        useStore.getState().setPositions(bp, mp);
+        return;
+      }
       moveBrick(brick.id, Math.max(0, p.x - offX), Math.max(0, p.y - offY));
     };
     const up = () => {

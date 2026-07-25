@@ -65,6 +65,31 @@ function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        ['c', 'x', 'v', 'a'].includes(e.key.toLowerCase())
+      ) {
+        // board clipboard — the piano roll owns these keys for notes while
+        // the editor is open
+        const st = useStore.getState();
+        if (st.editorOpen) return;
+        const k = e.key.toLowerCase();
+        const hasSel =
+          st.selection.bricks.length + st.selection.mixes.length > 0;
+        if (k === 'a') {
+          e.preventDefault();
+          st.setSelection({
+            bricks: st.bricks.map((b) => b.id),
+            mixes: st.mixes.map((m) => m.id),
+          });
+        } else if (k === 'v') {
+          if (!st.boardClipboard) return;
+          e.preventDefault();
+          st.pasteBoard();
+        } else if (hasSel) {
+          e.preventDefault();
+          st.copySelection(k === 'x');
+        }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         // board selection only — the editor and timeline own Delete when
         // they're the thing being worked on

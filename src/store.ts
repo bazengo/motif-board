@@ -112,6 +112,60 @@ function cloneBrick(
   });
 }
 
+/**
+ * Copy a set of bricks and mixes together. Layers of a copied mix are remapped
+ * onto copied bricks where those were included, and lineage inside the set is
+ * rewired to the copies — so a copied group comes out self-contained rather
+ * than pointing back at the originals.
+ */
+function cloneSet(
+  allBricks: Brick[],
+  allMixes: Mix[],
+  brickIds: string[],
+  mixIds: string[],
+  dx: number,
+  dy: number,
+  suffix: string
+): { bricks: Brick[]; mixes: Mix[] } {
+  const idMap = new Map<string, string>();
+  const bricks: Brick[] = [];
+  for (const id of brickIds) {
+    const src = allBricks.find((b) => b.id === id);
+    if (!src) continue;
+    const copy = cloneBrick(src, {
+      name: suffix ? `${src.name} ${suffix}` : src.name,
+      parentId: src.parentId,
+      dx,
+      dy,
+    });
+    idMap.set(src.id, copy.id);
+    bricks.push(copy);
+  }
+  for (const copy of bricks) {
+    if (copy.parentId && idMap.has(copy.parentId)) {
+      copy.parentId = idMap.get(copy.parentId)!;
+    }
+  }
+
+  const mixes: Mix[] = [];
+  for (const id of mixIds) {
+    const src = allMixes.find((m) => m.id === id);
+    if (!src) continue;
+    mixes.push({
+      ...src,
+      id: nanoid(8),
+      name: suffix ? `${src.name} ${suffix}` : src.name,
+      board: { x: src.board.x + dx, y: src.board.y + dy },
+      layers: src.layers.map((l) => ({
+        ...l,
+        brickId: idMap.get(l.brickId) ?? l.brickId,
+        automation: l.automation ? [...l.automation] : undefined,
+      })),
+    });
+  }
+  return { bricks, mixes };
+}
+
 interface AppState {
   bricks: Brick[];
   selectedBrickId: string | null;
@@ -147,6 +201,8 @@ interface AppState {
   /** Board selection, for the inspector and batch actions. Not persisted —
    *  it's a view concern, and a stale selection on reload would be confusing. */
   selection: { bricks: string[]; mixes: string[] };
+  /** Board-level clipboard for cards and mixes (notes have their own). */
+  boardClipboard: { bricks: Brick[]; mixes: Mix[] } | null;
   /** Board zoom factor. Board coordinates stay unscaled; this only affects
    *  rendering and client<->board conversion. */
   zoom: number;
@@ -231,6 +287,13 @@ interface AppState {
   clearSelection: () => void;
   duplicateSelection: () => void;
   deleteSelection: () => void;
+  copySelection: (cut?: boolean) => void;
+  pasteBoard: () => void;
+  /** Batch move, used when dragging a multi-selection. */
+  setPositions: (
+    brickPos: Record<string, { x: number; y: number }>,
+    mixPos: Record<string, { x: number; y: number }>
+  ) => void;
 
   // instrument presets
   savePreset: (brickId: string, name: string) => string | null;
@@ -285,6 +348,7 @@ export const useStore = create<AppState>()(
       clipboard: [],
       activeTags: [],
       selection: { bricks: [], mixes: [] },
+      boardClipboard: null,
       zoom: 1,
       editorLoop: true,
       noteLength: 1,
@@ -637,55 +701,65 @@ export const useStore = create<AppState>()(
         set((s) => {
           const { bricks: bIds, mixes: mIds } = s.selection;
           if (bIds.length === 0 && mIds.length === 0) return {};
-
-          const idMap = new Map<string, string>();
-          const newBricks: Brick[] = [];
-          for (const id of bIds) {
-            const src = s.bricks.find((b) => b.id === id);
-            if (!src) continue;
-            const copy = cloneBrick(src, {
-              name: `${src.name} copy`,
-              parentId: src.parentId,
-              dx: 28,
-              dy: 28,
-            });
-            idMap.set(src.id, copy.id);
-            newBricks.push(copy);
-          }
-          // keep lineage inside the copied set: if a brick's parent was also
-          // copied, point the copy at the copied parent
-          for (const copy of newBricks) {
-            if (copy.parentId && idMap.has(copy.parentId)) {
-              copy.parentId = idMap.get(copy.parentId)!;
-            }
-          }
-
-          const newMixes: Mix[] = [];
-          for (const id of mIds) {
-            const src = s.mixes.find((m) => m.id === id);
-            if (!src) continue;
-            newMixes.push({
-              ...src,
-              id: nanoid(8),
-              name: `${src.name} copy`,
-              board: { x: src.board.x + 28, y: src.board.y + 28 },
-              layers: src.layers.map((l) => ({
-                ...l,
-                brickId: idMap.get(l.brickId) ?? l.brickId,
-                automation: l.automation ? [...l.automation] : undefined,
-              })),
-            });
-          }
-
+          const made = cloneSet(s.bricks, s.mixes, bIds, mIds, 28, 28, 'copy');
           return {
-            bricks: [...s.bricks, ...newBricks],
-            mixes: [...s.mixes, ...newMixes],
+            bricks: [...s.bricks, ...made.bricks],
+            mixes: [...s.mixes, ...made.mixes],
             selection: {
-              bricks: newBricks.map((b) => b.id),
-              mixes: newMixes.map((m) => m.id),
+              bricks: made.bricks.map((b) => b.id),
+              mixes: made.mixes.map((m) => m.id),
             },
           };
         }),
+
+      copySelection: (cut = false) => {
+        const s = useStore.getState();
+        const { bricks: bIds, mixes: mIds } = s.selection;
+        if (bIds.length === 0 && mIds.length === 0) return;
+        set({
+          boardClipboard: {
+            bricks: s.bricks.filter((b) => bIds.includes(b.id)),
+            mixes: s.mixes.filter((m) => mIds.includes(m.id)),
+          },
+        });
+        if (cut) useStore.getState().deleteSelection();
+      },
+
+      pasteBoard: () =>
+        set((s) => {
+          const clip = s.boardClipboard;
+          if (!clip || (clip.bricks.length === 0 && clip.mixes.length === 0))
+            return {};
+          // paste against the clipboard's own snapshot, so the source can have
+          // been deleted (a cut) and this still works
+          const made = cloneSet(
+            [...s.bricks, ...clip.bricks],
+            [...s.mixes, ...clip.mixes],
+            clip.bricks.map((b) => b.id),
+            clip.mixes.map((m) => m.id),
+            36,
+            36,
+            ''
+          );
+          return {
+            bricks: [...s.bricks, ...made.bricks],
+            mixes: [...s.mixes, ...made.mixes],
+            selection: {
+              bricks: made.bricks.map((b) => b.id),
+              mixes: made.mixes.map((m) => m.id),
+            },
+          };
+        }),
+
+      setPositions: (brickPos, mixPos) =>
+        set((s) => ({
+          bricks: s.bricks.map((b) =>
+            brickPos[b.id] ? { ...b, board: { ...b.board, ...brickPos[b.id] } } : b
+          ),
+          mixes: s.mixes.map((m) =>
+            mixPos[m.id] ? { ...m, board: { ...mixPos[m.id] } } : m
+          ),
+        })),
 
       /** Remove every selected brick and mix, cleaning up all references. */
       deleteSelection: () =>
