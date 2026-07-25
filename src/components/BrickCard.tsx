@@ -3,7 +3,7 @@ import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
 import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
-import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
+import { CARD_W, CARD_H, MIX_W } from '../layout';
 import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
 import { clientToBoard } from '../lib/boardCoords';
 import { useBrickPlayhead, formatRemaining } from '../useBrickPlayhead';
@@ -94,13 +94,14 @@ export function BrickCard({ brick }: { brick: Brick }) {
       const st = useStore.getState();
 
       if (kind === 'mix') {
-        const hit = st.mixes.find(
-          (m) =>
-            p.x >= m.board.x &&
-            p.x <= m.board.x + MIX_W &&
-            p.y >= m.board.y &&
-            p.y <= m.board.y + MIX_H
-        );
+        // Hit-test the actual element: mix cards now size to their contents,
+        // so a fixed-height box would miss the lower part of a tall card.
+        const el = document
+          .elementFromPoint(ev.clientX, ev.clientY)
+          ?.closest('[data-mix]') as HTMLElement | null;
+        const hit = el
+          ? st.mixes.find((m) => m.id === el.dataset.mix)
+          : undefined;
         if (hit) {
           // dropping on a mix toggles: joins it, or detaches if already a member
           st.toggleBrickInMix(hit.id, brick.id);

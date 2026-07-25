@@ -1,11 +1,11 @@
 import { useStore } from '../store';
 import { engine } from '../audio/engine';
 import { exportMix } from '../lib/midi';
-import { mixAllItems, mixBpm } from '../lib/mix';
+import { mixAllItems, mixBpm, mixLengthBeats } from '../lib/mix';
 import { MIX_W } from '../layout';
 import { tagsForMix, matchesTags } from '../lib/tags';
 import { clientToBoard } from '../lib/boardCoords';
-import type { Mix } from '../types';
+import type { Brick, Mix } from '../types';
 
 export function MixNode({ mix }: { mix: Mix }) {
   const bricks = useStore((s) => s.bricks);
@@ -16,10 +16,21 @@ export function MixNode({ mix }: { mix: Mix }) {
   const updateMix = useStore((s) => s.updateMix);
   const deleteMix = useStore((s) => s.deleteMix);
 
+  const updateLayer = useStore((s) => s.updateLayer);
   const activeTags = useStore((s) => s.activeTags);
   const members = mix.layers.length;
   const matches = matchesTags(tagsForMix(mix), activeTags);
   const filtering = activeTags.length > 0;
+
+  // resolved members, so the card can show what's actually in the mix
+  const rows = mix.layers
+    .map((layer) => ({
+      layer,
+      brick: bricks.find((b) => b.id === layer.brickId),
+    }))
+    .filter((r): r is { layer: (typeof mix.layers)[number]; brick: Brick } => !!r.brick);
+  const lengthBeats = mixLengthBeats(mix, bricks);
+  const noteCount = rows.reduce((n, r) => n + r.brick.notes.length, 0);
 
   function onHandleDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
@@ -100,6 +111,7 @@ export function MixNode({ mix }: { mix: Mix }) {
         (active ? ' active' : '') +
         (filtering ? (matches ? ' tag-match' : ' tag-dim') : '')
       }
+      data-mix={mix.id}
       style={{ left: mix.board.x, top: mix.board.y, width: MIX_W, borderColor: mix.color }}
       onPointerDown={() => setActiveMix(mix.id)}
     >
@@ -127,6 +139,51 @@ export function MixNode({ mix }: { mix: Mix }) {
         onChange={(e) => updateMix(mix.id, { name: e.target.value })}
         onPointerDown={(e) => e.stopPropagation()}
       />
+
+      <div className="mix-node-stats">
+        {formatBars(lengthBeats)} · {mixBpm(mix, globalBpm)} BPM
+        {!mix.lockBpm && <span className="mix-node-free"> free</span>}
+        <br />
+        {members} layer{members === 1 ? '' : 's'} · {noteCount} note
+        {noteCount === 1 ? '' : 's'}
+      </div>
+
+      {rows.length > 0 && (
+        <div className="mix-node-members">
+          {rows.map(({ layer, brick }) => (
+            <div className="mix-node-member" key={layer.brickId}>
+              <span
+                className="mix-node-swatch"
+                style={{ background: brick.color }}
+              />
+              <span className="mix-node-mname" title={brick.name}>
+                {brick.name}
+              </span>
+              {/* quick mute/solo without opening the sidebar */}
+              <button
+                className={'mix-node-flag' + (layer.mute ? ' on mute' : '')}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() =>
+                  updateLayer(mix.id, layer.brickId, { mute: !layer.mute })
+                }
+                title={layer.mute ? 'Unmute' : 'Mute'}
+              >
+                M
+              </button>
+              <button
+                className={'mix-node-flag' + (layer.solo ? ' on solo' : '')}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() =>
+                  updateLayer(mix.id, layer.brickId, { solo: !layer.solo })
+                }
+                title={layer.solo ? 'Unsolo' : 'Solo'}
+              >
+                S
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mix-node-actions">
         <button className="mini-btn" title="Play mix" onClick={play}>
           ▶
@@ -159,4 +216,11 @@ export function MixNode({ mix }: { mix: Mix }) {
       </div>
     </div>
   );
+}
+
+/** Beats as bars, assuming 4/4 — mixes have no time signature of their own. */
+function formatBars(beats: number): string {
+  const bars = beats / 4;
+  const shown = Number.isInteger(bars) ? String(bars) : bars.toFixed(1);
+  return `${shown} bar${bars === 1 ? '' : 's'}`;
 }
