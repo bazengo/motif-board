@@ -74,6 +74,44 @@ export const DEFAULT_ENVELOPE: Envelope = {
   release: 0.6,
 };
 
+export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
+
+export const FILTER_TYPES: { id: FilterType; label: string }[] = [
+  { id: 'lowpass', label: 'Low pass' },
+  { id: 'highpass', label: 'High pass' },
+  { id: 'bandpass', label: 'Band pass' },
+];
+
+/** Static filter settings for a brick's synth voice. */
+export interface FilterSettings {
+  type: FilterType;
+  /** Resonance. Past ~10 this gets whistly. */
+  q: number;
+}
+
+/**
+ * Sweep applied to the filter cutoff on each note. `baseFrequency` is where
+ * the cutoff sits at rest and `octaves` how far the envelope lifts it, so
+ * octaves = 0 means "no sweep" whatever the ADSR says.
+ */
+export interface FilterEnvelope extends Envelope {
+  baseFrequency: number;
+  octaves: number;
+}
+
+export const DEFAULT_FILTER: FilterSettings = { type: 'lowpass', q: 1 };
+
+/** Deliberately inert: wide-open cutoff and no sweep, so bricks made before
+ *  the filter existed sound exactly as they did. */
+export const DEFAULT_FILTER_ENVELOPE: FilterEnvelope = {
+  attack: 0.02,
+  decay: 0.3,
+  sustain: 1,
+  release: 0.4,
+  baseFrequency: 18000,
+  octaves: 0,
+};
+
 export interface Brick {
   id: string;
   name: string;
@@ -95,6 +133,10 @@ export interface Brick {
   percussion: boolean;
   /** Amplitude envelope for the synth voices (ignored by piano/drums). */
   envelope: Envelope;
+  /** Filter + cutoff sweep. Only the plain waveform voices have a filter;
+   *  FM/AM and the sampled piano ignore these. */
+  filter: FilterSettings;
+  filterEnvelope: FilterEnvelope;
 }
 
 export const TIME_SIGNATURES: { num: number; den: number }[] = [

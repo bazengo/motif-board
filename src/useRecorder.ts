@@ -53,7 +53,7 @@ export function useRecorder(brickId: string) {
       const st = useStore.getState();
       const brick = st.bricks.find((x) => x.id === brickId);
       if (!brick) return;
-      engine.preview(pitch, brick.instrument, velocity, brick.percussion);
+      engine.preview(brick, pitch, velocity);
       setHeld((h) => (h.includes(pitch) ? h : [...h, pitch]));
       if (recordingRef.current) pending.current.set(pitch, currentBeat());
     });

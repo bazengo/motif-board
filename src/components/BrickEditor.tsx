@@ -6,6 +6,7 @@ import { PianoRoll } from './PianoRoll';
 import { RecordBar } from './RecordBar';
 import { InfoTip } from './InfoTip';
 import { EnvelopeEditor } from './EnvelopeEditor';
+import { FilterPanel } from './FilterPanel';
 import { useRecorder } from '../useRecorder';
 import {
   NOTE_NAMES,
@@ -386,6 +387,20 @@ export function BrickEditor() {
                     onChange={(env) => updateBrick(brick.id, { envelope: env })}
                   />
                 )}
+
+                {!brick.percussion &&
+                  brick.instrument !== 'piano' &&
+                  brick.instrument !== 'fm' &&
+                  brick.instrument !== 'am' && (
+                    <FilterPanel
+                      filter={brick.filter}
+                      envelope={brick.filterEnvelope}
+                      onFilter={(f) => updateBrick(brick.id, { filter: f })}
+                      onEnvelope={(fe) =>
+                        updateBrick(brick.id, { filterEnvelope: fe })
+                      }
+                    />
+                  )}
               </div>
             )}
 

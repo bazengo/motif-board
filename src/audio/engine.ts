@@ -7,7 +7,7 @@ import type {
   Envelope,
   AutomationPoint,
 } from '../types';
-import { DEFAULT_ENVELOPE } from '../types';
+import { DEFAULT_ENVELOPE, DEFAULT_FILTER, DEFAULT_FILTER_ENVELOPE } from '../types';
 import { layerLevels, mixLengthBeats } from '../lib/mix';
 import { evaluateAutomation, hasAutomation, sortPoints } from '../lib/automation';
 import { getSelectedOutput } from './midi-out';
@@ -49,11 +49,69 @@ const START_DELAY = 0.2; // seconds
 /** Cap on cached audition voices (see AudioEngine.preview). */
 const MAX_PREVIEW_SYNTHS = 8;
 
+/**
+ * Which kind of Tone voice a brick needs. This is the ONLY thing that forces
+ * a rebuild — waveform, envelopes and filter are all applied to a live synth
+ * (see applyPatch), so turning a knob never reconstructs the instrument.
+ */
+type VoiceClass = 'drums' | 'sampler' | 'fm' | 'am' | 'mono';
+
+function voiceClassOf(brick: Brick): VoiceClass {
+  if (brick.percussion) return 'drums';
+  switch (brick.instrument) {
+    case 'piano':
+      return 'sampler';
+    case 'fm':
+      return 'fm';
+    case 'am':
+      return 'am';
+    default:
+      return 'mono';
+  }
+}
+
+/** The settable half of a patch, shaped for Tone's `.set()`. */
+function patchOptions(brick: Brick): Record<string, unknown> {
+  const env = brick.envelope ?? DEFAULT_ENVELOPE;
+  const cls = voiceClassOf(brick);
+  if (cls === 'drums' || cls === 'sampler') return {};
+  if (cls === 'fm' || cls === 'am') return { envelope: { ...env } };
+
+  const f = brick.filter ?? DEFAULT_FILTER;
+  const fe = brick.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE;
+  return {
+    oscillator: { type: brick.instrument },
+    envelope: { ...env },
+    filter: { type: f.type, Q: f.q },
+    filterEnvelope: {
+      attack: fe.attack,
+      decay: fe.decay,
+      sustain: fe.sustain,
+      release: fe.release,
+      baseFrequency: fe.baseFrequency,
+      octaves: fe.octaves,
+    },
+  };
+}
+
+/** Push patch changes onto a sounding synth, no rebuild and no clicks. */
+function applyPatch(node: Voiceable | null, brick: Brick) {
+  if (!node || node instanceof DrumKit || node instanceof Tone.Sampler) return;
+  const opts = patchOptions(brick);
+  if (Object.keys(opts).length === 0) return;
+  try {
+    node.set(opts as never);
+  } catch {
+    /* a param the voice doesn't have — harmless, keep playing */
+  }
+}
+
 /** Percussion bricks always use the drum kit, whatever instrument is set. */
 function makeVoiceFor(brick: Brick): Voiceable {
-  return brick.percussion
-    ? new DrumKit()
-    : makeSynth(brick.instrument, brick.envelope);
+  if (brick.percussion) return new DrumKit();
+  const synth = makeSynth(brick.instrument, brick.envelope);
+  applyPatch(synth, brick);
+  return synth;
 }
 
 function makeSynth(
@@ -81,7 +139,11 @@ function makeSynth(
     case 'am':
       return new Tone.PolySynth(Tone.AMSynth, { envelope: { ...env } });
     default:
-      return new Tone.PolySynth(Tone.Synth, {
+      // MonoSynth rather than Synth: it carries a filter and a cutoff
+      // envelope, which is what makes these read as synth voices rather than
+      // plain tones. Defaults leave the filter wide open, so existing bricks
+      // sound unchanged until the filter is dialled in.
+      return new Tone.PolySynth(Tone.MonoSynth, {
         oscillator: { type: instrument },
         envelope: { ...env },
       });
@@ -106,11 +168,6 @@ function buildEvents(brick: Brick, secPerBeat: number): NoteEvent[] {
   }));
 }
 
-function envSignature(brick: Brick): string {
-  const e = brick.envelope ?? DEFAULT_ENVELOPE;
-  return `${brick.instrument}:${e.attack},${e.decay},${e.sustain},${e.release}`;
-}
-
 interface Voice {
   brickId: string;
   synth: Voiceable | null; // null when monitoring is off (MIDI-only)
@@ -128,7 +185,7 @@ interface Voice {
   part: Tone.Part<NoteEvent>;
   channel: number;
   instrument: InstrumentId;
-  envSig: string;
+  voiceClass: VoiceClass;
   loop: boolean;
   lengthBeats: number;
   level: number; // current effective gain (0 = muted/not soloed)
@@ -424,7 +481,7 @@ class AudioEngine {
       part: null as unknown as Tone.Part<NoteEvent>,
       channel,
       instrument: brick.instrument,
-      envSig: envSignature(brick),
+      voiceClass: voiceClassOf(brick),
       loop,
       lengthBeats: brick.lengthBeats,
       level: gain,
@@ -587,7 +644,7 @@ class AudioEngine {
         part: null as unknown as Tone.Part<NoteEvent>,
         channel,
         instrument: brick.instrument,
-        envSig: envSignature(brick),
+        voiceClass: voiceClassOf(brick),
         loop: false,
         lengthBeats: brick.lengthBeats,
         level: 1,
@@ -656,16 +713,19 @@ class AudioEngine {
       const prev = voice.srcBrick;
       voice.srcBrick = brick;
 
-      // rebuild the voice when the instrument OR its envelope changes, so
-      // envelope tweaks are audible without restarting playback
-      const nextEnvSig = envSignature(brick);
-      if (nextEnvSig !== voice.envSig && voice.synth && voice.volume) {
-        const next = makeVoiceFor(brick).connect(voice.volume);
+      // Only a different kind of voice needs rebuilding. Waveform, envelopes
+      // and filter are pushed onto the live synth, so dragging a knob during
+      // playback doesn't dispose and reconstruct the instrument mid-note.
+      const nextClass = voiceClassOf(brick);
+      if (nextClass !== voice.voiceClass && voice.synth && voice.volume) {
+        const next = makeVoiceFor(brick).connect(voice.autoVol ?? voice.volume);
         voice.synth.dispose();
         voice.synth = next;
-        voice.instrument = brick.instrument;
-        voice.envSig = nextEnvSig;
+        voice.voiceClass = nextClass;
+      } else {
+        applyPatch(voice.synth, brick);
       }
+      voice.instrument = brick.instrument;
 
       // nothing rhythmic changed (a rename, a colour, a tag) — leave the part
       if (prev && prev.notes === brick.notes && prev.lengthBeats === brick.lengthBeats)
@@ -814,30 +874,22 @@ class AudioEngine {
     }
   }
 
-  /** Audition a single pitch (used when placing notes). */
-  async preview(
-    pitch: number,
-    instrument: InstrumentId,
-    gain = 0.8,
-    percussion = false,
-    env: Envelope = DEFAULT_ENVELOPE
-  ) {
+  /**
+   * Audition a single pitch (used when placing notes and for note input).
+   * Cached per brick and voice class, then re-patched on each hit — keying by
+   * the patch itself would mint a fresh synth for every knob position.
+   */
+  async preview(brick: Brick, pitch: number, gain = 0.8) {
     await this.ensureStarted();
-    // cache per instrument *and* envelope, so auditions match playback
-    const key = percussion
-      ? 'drums'
-      : `${instrument}:${env.attack},${env.decay},${env.sustain},${env.release}`;
+    const cls = voiceClassOf(brick);
+    const key = cls === 'drums' ? 'drums' : `${brick.id}:${cls}`;
     let entry = this.previewSynths.get(key);
     if (!entry) {
       const vol = new Tone.Volume(gainToDb(gain)).toDestination();
-      const node = (
-        percussion ? new DrumKit() : makeSynth(instrument, env)
-      ).connect(vol);
+      const node = makeVoiceFor(brick).connect(vol);
       entry = { node, vol };
       this.previewSynths.set(key, entry);
-      // The key includes the envelope, so dragging the envelope editor would
-      // otherwise mint a new synth (and volume node) per micro-change and
-      // never release them. Keep a small LRU and dispose what falls out.
+      // bounded so a big board can't accumulate a synth per brick forever
       while (this.previewSynths.size > MAX_PREVIEW_SYNTHS) {
         const oldest = this.previewSynths.keys().next().value as string;
         const dead = this.previewSynths.get(oldest);
@@ -846,9 +898,10 @@ class AudioEngine {
         dead?.vol.dispose();
       }
     } else {
-      // refresh recency
+      // refresh recency, and track any patch edits since the last audition
       this.previewSynths.delete(key);
       this.previewSynths.set(key, entry);
+      applyPatch(entry.node, brick);
     }
     const synth = entry.node;
     if (synth instanceof DrumKit) synth.triggerAttackRelease(pitch, 0.3);

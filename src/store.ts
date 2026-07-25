@@ -17,6 +17,8 @@ import {
   MIX_COLORS,
   DEFAULT_DISPLAY,
   DEFAULT_ENVELOPE,
+  DEFAULT_FILTER,
+  DEFAULT_FILTER_ENVELOPE,
 } from './types';
 
 let colorCursor = 0;
@@ -51,6 +53,8 @@ export function makeBrick(partial: Partial<Brick> = {}): Brick {
     display: { ...DEFAULT_DISPLAY },
     percussion: false,
     envelope: { ...DEFAULT_ENVELOPE },
+    filter: { ...DEFAULT_FILTER },
+    filterEnvelope: { ...DEFAULT_FILTER_ENVELOPE },
     ...partial,
   };
 }
@@ -772,7 +776,7 @@ export const useStore = create<AppState>()(
       name: 'music-composition-suite',
       // NOTE: bump this whenever a backfill is added below, or existing saves
       // never receive it (that shipped mixes with an undefined tempo).
-      version: 8,
+      version: 9,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {
@@ -794,6 +798,8 @@ export const useStore = create<AppState>()(
           timeSig: b.timeSig ?? { num: 4, den: 4 },
           percussion: b.percussion ?? false,
           envelope: b.envelope ?? { ...DEFAULT_ENVELOPE },
+          filter: b.filter ?? { ...DEFAULT_FILTER },
+          filterEnvelope: b.filterEnvelope ?? { ...DEFAULT_FILTER_ENVELOPE },
         }));
         // backfill mix fields added over time
         if (state.mixes) {
