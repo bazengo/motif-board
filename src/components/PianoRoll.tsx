@@ -1,14 +1,18 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { scalePitchClasses } from '../lib/theory';
-import { midiToName, engine } from '../audio/engine';
+import { engine } from '../audio/engine';
+import { pitchLabel, MIDI_LOW, MIDI_HIGH } from '../lib/pitch';
 import { DRUM_PITCHES, drumName, drumShortName } from '../lib/drums';
+import { useBrickPlayhead } from '../useBrickPlayhead';
 import type { Note } from '../types';
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 
-const PITCH_HIGH = 96; // C7
-const PITCH_LOW = 36; // C2
+// C-2..C8 — the roll used to stop at C2/C7, which cut off bass and high
+// percussion. "Fit" below makes the extra rows manageable.
+const PITCH_HIGH = MIDI_HIGH;
+const PITCH_LOW = MIDI_LOW;
 const BASE_ROW_H = 16;
 const BASE_BEAT_W = 44;
 
@@ -110,7 +114,12 @@ export function PianoRoll({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<Marquee>(null);
-  const [playhead, setPlayhead] = useState<number | null>(null);
+  // One source of truth for "where is this brick right now" (see
+  // useBrickPlayhead): it knows the voice's real loop length, stops a one-shot
+  // at the end of its material instead of wrapping during the release tail,
+  // and only animates while something is actually playing.
+  const head = useBrickPlayhead(brickId);
+  const playhead = head ? head.progress * (brick?.lengthBeats ?? 4) : null;
   const [dotted, setDotted] = useState(false);
   const [triplet, setTriplet] = useState(false);
   const dragRef = useRef<Drag>(null);
@@ -128,22 +137,6 @@ export function PianoRoll({
   const syncingRef = useRef(false);
   const marqueeRef = useRef<Marquee>(null);
   marqueeRef.current = marquee;
-
-  // Playhead: follow the transport while this brick is playing.
-  useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const b = useStore.getState().bricks.find((x) => x.id === brickId);
-      if (b && engine.isBrickPlaying(brickId)) {
-        setPlayhead(engine.transportBeats() % b.lengthBeats);
-      } else {
-        setPlayhead(null);
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [brickId]);
 
   // Ctrl/⌘ + wheel over the roll zooms horizontally, anchored at the cursor.
   useEffect(() => {
@@ -165,6 +158,28 @@ export function PianoRoll({
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [zoomX]);
+
+  /**
+   * Zoom and scroll vertically so the pitches actually used fill the view.
+   * With the full MIDI range on offer most of the grid is empty, so this is
+   * the quickest way back to the music.
+   */
+  function fitToUsedPitches() {
+    const el = rollRef.current;
+    if (!el || !brick || brick.notes.length === 0) return;
+    const rows = brick.notes.map((n) => rowOfPitch(n.pitch));
+    const minRow = Math.min(...rows);
+    const maxRow = Math.max(...rows);
+    const spanRows = maxRow - minRow + 1 + 2; // a row of headroom either side
+    const z = Math.max(0.25, Math.min(3, el.clientHeight / spanRows / BASE_ROW_H));
+    setZoomY(z);
+    // scroll after the new row height has been applied
+    requestAnimationFrame(() => {
+      const rh = BASE_ROW_H * z;
+      const centre = ((minRow + maxRow + 1) / 2) * rh;
+      el.scrollTop = Math.max(0, centre - el.clientHeight / 2);
+    });
+  }
 
   // Keep the velocity lane horizontally aligned with the grid.
   function syncScroll(from: 'roll' | 'vel' | 'ruler') {
@@ -592,8 +607,16 @@ export function PianoRoll({
         <button className="nv-btn" onClick={() => setZoomX((z) => Math.max(0.35, z / 1.3))}>−</button>
         <button className="nv-btn" onClick={() => setZoomX((z) => Math.min(4, z * 1.3))}>+</button>
         <span className="zoom-label">↕</span>
-        <button className="nv-btn" onClick={() => setZoomY((z) => Math.max(0.6, z / 1.25))}>−</button>
-        <button className="nv-btn" onClick={() => setZoomY((z) => Math.min(2.5, z * 1.25))}>+</button>
+        <button className="nv-btn" onClick={() => setZoomY((z) => Math.max(0.25, z / 1.25))}>−</button>
+        <button className="nv-btn" onClick={() => setZoomY((z) => Math.min(3, z * 1.25))}>+</button>
+        <button
+          className="nv-btn"
+          disabled={brick.notes.length === 0}
+          onClick={fitToUsedPitches}
+          title="Fit the used pitch range to the view"
+        >
+          ⤢
+        </button>
       </span>
 
       <span className="note-palette" title="Length given to notes you place">
@@ -813,7 +836,14 @@ export function PianoRoll({
         rollRef.current = el;
         if (el && el.dataset.init !== '1') {
           el.dataset.init = '1';
-          el.scrollTop = (PITCH_HIGH - 72) * ROW_H - 80;
+          // Centre on the notes if there are any, else on middle C. With the
+          // full MIDI range most rows are empty, so landing at a fixed offset
+          // would often open on silence.
+          const rows = (brick?.notes ?? []).map((n) => rowOfPitch(n.pitch));
+          const centreRow = rows.length
+            ? (Math.min(...rows) + Math.max(...rows) + 1) / 2
+            : rowOfPitch(60) + 0.5;
+          el.scrollTop = Math.max(0, centreRow * ROW_H - el.clientHeight / 2);
         }
       }}
     >
@@ -837,7 +867,7 @@ export function PianoRoll({
               ) : (
                 r.pc === 0 && (
                   <text x={6} y={r.i * ROW_H + 12} className="roll-keylabel">
-                    {midiToName(r.pitch)}
+                    {pitchLabel(r.pitch)}
                   </text>
                 )
               )}
@@ -916,7 +946,7 @@ export function PianoRoll({
                 const showHandle = isSel || hovered === n.id;
                 const label = percussion
                   ? drumShortName(n.pitch)
-                  : midiToName(n.pitch);
+                  : pitchLabel(n.pitch);
                 return (
                   <g
                     key={n.id}

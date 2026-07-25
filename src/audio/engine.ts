@@ -290,6 +290,10 @@ class AudioEngine {
     if (!voice || voice.loopSec <= 0) return null;
     const elapsed = Math.max(0, Tone.getTransport().seconds - PART_LEAD);
     const len = voice.loopSec;
+    // A one-shot is torn down a moment after its last note so releases aren't
+    // clipped. Report it finished at the end of the material, or the tracker
+    // sweeps on into a phantom extra pass during that grace period.
+    if (!voice.loop && elapsed >= len) return null;
     const pos = ((elapsed % len) + len) % len;
     return { progress: pos / len, remaining: len - pos };
   }

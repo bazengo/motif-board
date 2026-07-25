@@ -8,7 +8,7 @@ import {
   describeMidiError,
   type MidiInputInfo,
 } from '../audio/midi-in';
-import { midiToName } from '../audio/engine';
+import { pitchLabel } from '../lib/pitch';
 import { useStore } from '../store';
 import { InfoTip } from './InfoTip';
 import type { useRecorder } from '../useRecorder';
@@ -132,7 +132,7 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
         <span className="rec-label">Oct</span>
         <button
           className="oct-btn"
-          onClick={() => rec.setOctave(Math.max(0, rec.octave - 1))}
+          onClick={() => rec.setOctave(Math.max(-2, rec.octave - 1))}
         >
           −
         </button>
@@ -147,7 +147,7 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
 
       {/* fixed width: held notes replace nothing, so the row never reflows */}
       <span className="rec-held" title="Notes currently held">
-        {rec.held.length > 0 ? rec.held.map((p) => midiToName(p)).join(' ') : '—'}
+        {rec.held.length > 0 ? rec.held.map((p) => pitchLabel(p)).join(' ') : '—'}
       </span>
       <InfoTip label="Keyboard layout">
         Play with the computer keyboard: <strong>A</strong>=C,{' '}

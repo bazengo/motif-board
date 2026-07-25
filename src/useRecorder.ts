@@ -17,7 +17,8 @@ import {
  * the looping brick's playhead.
  */
 export function useRecorder(brickId: string) {
-  const [octave, setOctave] = useState(4);
+  // octave numbering matches the roll's labels (middle C is C3)
+  const [octave, setOctave] = useState(3);
   const [recording, setRecording] = useState(false);
   const [countIn, setCountIn] = useState(true);
   const [quantizeInput, setQuantizeInput] = useState(true);
@@ -99,7 +100,7 @@ export function useRecorder(brickId: string) {
       if (isTyping(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'z') {
-        setOctave((o) => Math.max(0, o - 1));
+        setOctave((o) => Math.max(-2, o - 1));
         return;
       }
       if (k === 'x') {
@@ -110,14 +111,14 @@ export function useRecorder(brickId: string) {
       if (semi == null || down.has(k)) return;
       down.add(k);
       e.preventDefault();
-      emitNoteOn(12 * (octave + 1) + semi, 0.8);
+      emitNoteOn(12 * (octave + 2) + semi, 0.8);
     }
     function onKeyUp(e: KeyboardEvent) {
       const k = e.key.toLowerCase();
       const semi = keyToSemitone(k);
       if (semi == null || !down.has(k)) return;
       down.delete(k);
-      emitNoteOff(12 * (octave + 1) + semi);
+      emitNoteOff(12 * (octave + 2) + semi);
     }
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);

@@ -134,7 +134,9 @@ export function TimelineStrip() {
   // while running the playhead follows the transport; otherwise it sits where
   // it was last sought to
   const running = playing && engine.playbackMode === 'timeline';
-  const displayHead = elapsed ?? playhead;
+  // clamp: the transport runs a moment past the last note so releases aren't
+  // clipped, and the playhead shouldn't drift past the end during that
+  const displayHead = Math.min(elapsed ?? playhead, plan.totalSeconds);
   const atEnd = playhead >= plan.totalSeconds - 0.01;
 
   function play() {
