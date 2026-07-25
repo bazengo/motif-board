@@ -74,6 +74,21 @@ export const DEFAULT_ENVELOPE: Envelope = {
   release: 0.6,
 };
 
+/**
+ * A saved sound. Holds exactly the fields that define how a brick's voice
+ * sounds, so it can be applied to any other brick — and carried between
+ * projects as a file.
+ */
+export interface InstrumentPreset {
+  id: string;
+  name: string;
+  instrument: InstrumentId;
+  percussion: boolean;
+  envelope: Envelope;
+  filter: FilterSettings;
+  filterEnvelope: FilterEnvelope;
+}
+
 export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 
 export const FILTER_TYPES: { id: FilterType; label: string }[] = [

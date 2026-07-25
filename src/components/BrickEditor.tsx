@@ -7,6 +7,7 @@ import { RecordBar } from './RecordBar';
 import { InfoTip } from './InfoTip';
 import { EnvelopeEditor } from './EnvelopeEditor';
 import { FilterPanel } from './FilterPanel';
+import { InstrumentPresets } from './InstrumentPresets';
 import { useRecorder } from '../useRecorder';
 import {
   NOTE_NAMES,
@@ -342,6 +343,8 @@ export function BrickEditor() {
 
             {tab === 'sound' && (
               <div className="side-content">
+                <InstrumentPresets brickId={brickId} />
+
                 <label className="side-label">Instrument</label>
                 <select
                   className="sound-select"

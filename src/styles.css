@@ -1879,3 +1879,26 @@
   color: #e6e9ef;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Instrument presets ---------- */
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.preset-row .ghost-btn {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.preset-name {
+  flex: 1;
+  min-width: 0;
+  background: #12151b;
+  border: 1px solid #333a47;
+  color: #e6e9ef;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}

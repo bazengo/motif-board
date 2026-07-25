@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { descendantIds, familyIds } from './lib/lineage';
 import { bricksInGroup, mixesInGroup } from './lib/groups';
 import { debouncedStorage } from './lib/debouncedStorage';
+import { presetFromBrick, presetPatch } from './lib/presets';
 import {
   type Brick,
   type Mix,
@@ -12,6 +13,7 @@ import {
   type PhraseTemplate,
   type TimelineSection,
   type Group,
+  type InstrumentPreset,
   type InstrumentId,
   STICKY_COLORS,
   MIX_COLORS,
@@ -127,6 +129,8 @@ interface AppState {
   } | null;
   timeline: TimelineSection[];
   groups: Group[];
+  /** Saved sounds, applicable to any brick and portable between projects. */
+  presets: InstrumentPreset[];
   // phrase-template "brush" used when clicking the piano roll
   templates: PhraseTemplate[];
   activeBrush: string | null; // template id, or null = single note
@@ -215,6 +219,13 @@ interface AppState {
   ) => void;
   resizeGroup: (id: string, w: number, h: number) => void;
 
+  // instrument presets
+  savePreset: (brickId: string, name: string) => string | null;
+  applyPreset: (presetId: string, brickId: string) => void;
+  renamePreset: (id: string, name: string) => void;
+  deletePreset: (id: string) => void;
+  addPresets: (presets: InstrumentPreset[]) => void;
+
   // phrase templates
   addTemplate: (name: string, notes: PhraseTemplate['notes']) => string;
   renameTemplate: (id: string, name: string) => void;
@@ -252,6 +263,7 @@ export const useStore = create<AppState>()(
       linking: null,
       timeline: [],
       groups: [],
+      presets: [],
       templates: [],
       activeBrush: null,
       snapToScale: false,
@@ -589,6 +601,38 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      savePreset: (brickId, name) => {
+        const s = useStore.getState();
+        const brick = s.bricks.find((b) => b.id === brickId);
+        if (!brick) return null;
+        const preset = presetFromBrick(brick, name.trim() || 'Instrument');
+        set((st) => ({ presets: [...st.presets, preset] }));
+        return preset.id;
+      },
+
+      applyPreset: (presetId, brickId) =>
+        set((s) => {
+          const preset = s.presets.find((p) => p.id === presetId);
+          if (!preset) return {};
+          const patch = presetPatch(preset);
+          return {
+            bricks: s.bricks.map((b) =>
+              b.id === brickId ? { ...b, ...patch } : b
+            ),
+          };
+        }),
+
+      renamePreset: (id, name) =>
+        set((s) => ({
+          presets: s.presets.map((p) => (p.id === id ? { ...p, name } : p)),
+        })),
+
+      deletePreset: (id) =>
+        set((s) => ({ presets: s.presets.filter((p) => p.id !== id) })),
+
+      addPresets: (presets) =>
+        set((s) => ({ presets: [...s.presets, ...presets] })),
+
       setLinking: (v) => set({ linking: v }),
 
       addTimelineSection: (mixId, atIndex) => {
@@ -776,7 +820,7 @@ export const useStore = create<AppState>()(
       name: 'music-composition-suite',
       // NOTE: bump this whenever a backfill is added below, or existing saves
       // never receive it (that shipped mixes with an undefined tempo).
-      version: 9,
+      version: 10,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as
           | {
@@ -786,6 +830,7 @@ export const useStore = create<AppState>()(
               activeMixId?: string | null;
               templates?: PhraseTemplate[];
               groups?: Group[];
+              presets?: InstrumentPreset[];
               activeBrush?: string | null;
             }
           | undefined;
@@ -829,6 +874,7 @@ export const useStore = create<AppState>()(
           state.activeBrush = null;
         }
         state.groups = state.groups ?? [];
+        state.presets = state.presets ?? [];
         return state as never;
       },
       // writes are coalesced; see debouncedStorage for why
@@ -848,6 +894,7 @@ export const useStore = create<AppState>()(
         masterVolume: s.masterVolume,
         timeline: s.timeline,
         groups: s.groups,
+        presets: s.presets,
       }),
     }
   )
