@@ -1,7 +1,6 @@
 import { useStore } from '../store';
 import type {
   Brick,
-  Group,
   InstrumentPreset,
   Mix,
   PhraseTemplate,
@@ -15,7 +14,6 @@ interface ProjectFile {
   globalBpm: number;
   templates: PhraseTemplate[];
   presets?: InstrumentPreset[];
-  groups: Group[];
 }
 
 export function exportProject(filename = 'motif-board-project.json') {
@@ -28,7 +26,6 @@ export function exportProject(filename = 'motif-board-project.json') {
     globalBpm: s.globalBpm,
     templates: s.templates,
     presets: s.presets,
-    groups: s.groups,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: 'application/json',
@@ -55,7 +52,6 @@ export async function importProject(file: File): Promise<void> {
     globalBpm: data.globalBpm ?? 120,
     templates: data.templates ?? [],
     presets: data.presets ?? [],
-    groups: data.groups ?? [],
     activeBrush: null,
     activeMixId: data.mixes?.[0]?.id ?? null,
     selectedBrickId: null,

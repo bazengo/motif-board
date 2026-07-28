@@ -1,5 +1,5 @@
 import { useStore } from './store';
-import type { Brick, Group, Mix, TimelineSection, PhraseTemplate } from './types';
+import type { Brick, Mix, TimelineSection, PhraseTemplate } from './types';
 
 // Lightweight, non-invasive undo/redo. We subscribe to the store and snapshot
 // the tracked slice (bricks + mixes + globalBpm) on a debounce, so a burst of
@@ -9,7 +9,6 @@ interface Snap {
   mixes: Mix[];
   timeline: TimelineSection[];
   templates: PhraseTemplate[];
-  groups: Group[];
   globalBpm: number;
 }
 
@@ -28,7 +27,6 @@ function snap(): Snap {
     mixes: s.mixes,
     timeline: s.timeline,
     templates: s.templates,
-    groups: s.groups,
     globalBpm: s.globalBpm,
   };
 }
@@ -40,7 +38,6 @@ function same(a: Snap, b: Snap): boolean {
     a.mixes === b.mixes &&
     a.timeline === b.timeline &&
     a.templates === b.templates &&
-    a.groups === b.groups &&
     a.globalBpm === b.globalBpm
   );
 }
@@ -68,7 +65,6 @@ function apply(s: Snap) {
     mixes: s.mixes,
     timeline: s.timeline,
     templates: s.templates,
-    groups: s.groups,
     globalBpm: s.globalBpm,
   });
   traveling = false;

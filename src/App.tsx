@@ -25,7 +25,6 @@ function App() {
   const setGlobalBpm = useStore((s) => s.setGlobalBpm);
   const addBrick = useStore((s) => s.addBrick);
   const addMix = useStore((s) => s.addMix);
-  const addGroup = useStore((s) => s.addGroup);
   const openEditor = useStore((s) => s.openEditor);
   const masterVolume = useStore((s) => s.masterVolume);
   const setMasterVolume = useStore((s) => s.setMasterVolume);
@@ -211,9 +210,6 @@ function App() {
           </button>
           <input ref={midiFileRef} type="file" accept=".mid,.midi" hidden onChange={onImportMidi} />
 
-          <button className="ghost-btn" onClick={() => addGroup()}>
-            + Group
-          </button>
           <button className="ghost-btn" onClick={() => addMix()}>
             + Mix
           </button>

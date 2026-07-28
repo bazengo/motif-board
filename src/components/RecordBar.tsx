@@ -19,7 +19,6 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
   const [selected, setSelected] = useState<string | null>(getSelectedInputId());
   const [err, setErr] = useState<string | null>(null);
   const mixes = useStore((s) => s.mixes);
-  const groups = useStore((s) => s.groups);
 
   useEffect(
     () =>
@@ -103,7 +102,7 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
           <select
             value={rec.backing ?? ''}
             onChange={(e) => rec.setBacking(e.target.value || null)}
-            title="Loop a mix or board group alongside, starting after the count-in"
+            title="Loop a mix alongside, starting after the count-in"
           >
             <option value="">— nothing —</option>
             {mixes.length > 0 && (
@@ -111,15 +110,6 @@ export function RecordBar({ rec }: { rec: ReturnType<typeof useRecorder> }) {
                 {mixes.map((m) => (
                   <option key={m.id} value={`mix:${m.id}`}>
                     {m.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {groups.length > 0 && (
-              <optgroup label="Groups">
-                {groups.map((g) => (
-                  <option key={g.id} value={`group:${g.id}`}>
-                    {g.name}
                   </option>
                 ))}
               </optgroup>

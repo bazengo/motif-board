@@ -1,5 +1,4 @@
-import type { Brick, Group, Mix } from '../types';
-import { groupsForBrick } from './groups';
+import type { Brick, Mix } from '../types';
 import { rootOf, lineageRoots } from './lineage';
 
 // Tags come from two places:
@@ -10,7 +9,7 @@ export interface Tag {
   id: string; // "#verse" or "mix:<id>"
   label: string;
   color: string;
-  kind: 'text' | 'mix' | 'group' | 'root';
+  kind: 'text' | 'mix' | 'root';
 }
 
 const TEXT_TAG_COLOR = '#8ecae6';
@@ -43,11 +42,7 @@ export function mixTextTags(mix: Mix): string[] {
 }
 
 /** Every tag in the project, mixes first then hashtags alphabetically. */
-export function allTags(
-  bricks: Brick[],
-  mixes: Mix[],
-  groups: Group[] = []
-): Tag[] {
+export function allTags(bricks: Brick[], mixes: Mix[]): Tag[] {
   const tags: Tag[] = [
     // one per lineage that has more than a single brick
     ...lineageRoots(bricks).map((b) => ({
@@ -55,12 +50,6 @@ export function allTags(
       label: b.name,
       color: b.color,
       kind: 'root' as const,
-    })),
-    ...groups.filter((g) => !g.autoKey).map((g) => ({
-      id: `group:${g.id}`,
-      label: g.name,
-      color: g.color,
-      kind: 'group' as const,
     })),
     ...mixes.map((m) => ({
       id: `mix:${m.id}`,
@@ -73,7 +62,6 @@ export function allTags(
   const text = new Set<string>();
   for (const b of bricks) brickTextTags(b).forEach((t) => text.add(t));
   for (const m of mixes) mixTextTags(m).forEach((t) => text.add(t));
-  for (const g of groups) parseHashtags(g.notes ?? '').forEach((t) => text.add(t));
 
   for (const t of [...text].sort()) {
     tags.push({
@@ -90,23 +78,10 @@ export function allTags(
 export function tagsForBrick(
   brick: Brick,
   mixes: Mix[],
-  groups: Group[] = [],
   /** Needed to resolve the lineage-root tag; omit to skip it. */
   allBricks: Brick[] = []
 ): Tag[] {
-  // a brick inherits the tags of any group it sits in, including that group's
-  // own hashtags
-  const out: Tag[] = groupsForBrick(brick, groups)
-    .filter((g) => !g.autoKey)
-    .flatMap((g) => [
-    { id: `group:${g.id}`, label: g.name, color: g.color, kind: 'group' as const },
-    ...parseHashtags(g.notes ?? '').map((t) => ({
-      id: `#${t}`,
-      label: `#${t}`,
-      color: TEXT_TAG_COLOR,
-      kind: 'text' as const,
-    })),
-  ]);
+  const out: Tag[] = [];
   out.push(
     ...mixes
     .filter((m) => m.layers.some((l) => l.brickId === brick.id))

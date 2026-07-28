@@ -201,22 +201,6 @@ export interface Mix {
   bpm: number;
 }
 
-/**
- * A labelled region of the corkboard. Purely organisational — membership is
- * spatial (whatever sits inside it), so there's no extra gesture to learn.
- * A group acts as a tag, which its member bricks inherit.
- */
-export interface Group {
-  id: string;
-  name: string;
-  color: string;
-  /** Set when a sort generated this frame, so re-sorting reuses it rather
-   *  than piling up duplicates. Auto frames don't act as tags. */
-  autoKey?: string;
-  board: { x: number; y: number; w: number; h: number };
-  notes: string;
-}
-
 /** One placed mix on the arrangement timeline. Sections play in order; each
  *  either follows the master tempo or runs at its own. */
 export interface TimelineSection {

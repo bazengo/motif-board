@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { BrickCard } from './BrickCard';
 import { MixNode } from './MixNode';
-import { GroupFrame } from './GroupFrame';
 import { CARD_W, CARD_H, MIX_W, MIX_H } from '../layout';
 import { clientToBoard } from '../lib/boardCoords';
 import { tagsForBrick, tagsForMix, matchesTags } from '../lib/tags';
@@ -13,7 +12,6 @@ export function Board() {
   const mixes = useStore((s) => s.mixes);
   const linking = useStore((s) => s.linking);
   const activeTags = useStore((s) => s.activeTags);
-  const groups = useStore((s) => s.groups);
   const addBrick = useStore((s) => s.addBrick);
   const openEditor = useStore((s) => s.openEditor);
   const zoom = useStore((s) => s.zoom);
@@ -63,14 +61,14 @@ export function Board() {
     return {
       bricks: new Set(
         bricks
-          .filter((b) => matchesTags(tagsForBrick(b, mixes, groups, bricks), activeTags))
+          .filter((b) => matchesTags(tagsForBrick(b, mixes, bricks), activeTags))
           .map((b) => b.id)
       ),
       mixes: new Set(
         mixes.filter((m) => matchesTags(tagsForMix(m), activeTags)).map((m) => m.id)
       ),
     };
-  }, [bricks, mixes, groups, activeTags]);
+  }, [bricks, mixes, activeTags]);
   const brickMatches = (b: Brick) => !matchSets || matchSets.bricks.has(b.id);
   const mixMatches = (m: Mix) => !matchSets || matchSets.mixes.has(m.id);
   const edgeOpacity = (on: boolean) => (filtering && !on ? 0.12 : 1);
@@ -108,10 +106,6 @@ export function Board() {
   for (const m of mixes) {
     maxX = Math.max(maxX, m.board.x + MIX_W + 120);
     maxY = Math.max(maxY, m.board.y + MIX_H + 120);
-  }
-  for (const g of groups) {
-    maxX = Math.max(maxX, g.board.x + g.board.w + 120);
-    maxY = Math.max(maxY, g.board.y + g.board.h + 120);
   }
   if (linking) {
     maxX = Math.max(maxX, linking.x + 40);
@@ -315,10 +309,6 @@ export function Board() {
           transformOrigin: '0 0',
         }}
       >
-      {groups.map((g) => (
-        <GroupFrame key={g.id} group={g} />
-      ))}
-
       {marquee && (
         <div
           className="board-marquee"

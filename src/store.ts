@@ -2,10 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import { descendantIds, familyIds, reparentAfterDelete } from './lib/lineage';
-import { bricksInGroup, mixesInGroup } from './lib/groups';
 import { debouncedStorage } from './lib/debouncedStorage';
 import { presetFromBrick, presetPatch } from './lib/presets';
-import { arrangeBoard, type SortMode } from './lib/arrange';
 import {
   type Brick,
   type Mix,
@@ -13,7 +11,6 @@ import {
   type Note,
   type PhraseTemplate,
   type TimelineSection,
-  type Group,
   type InstrumentPreset,
   type InstrumentId,
   STICKY_COLORS,
@@ -183,7 +180,6 @@ interface AppState {
     kind: 'mix' | 'branch' | 'timeline';
   } | null;
   timeline: TimelineSection[];
-  groups: Group[];
   /** Saved sounds, applicable to any brick and portable between projects. */
   presets: InstrumentPreset[];
   // phrase-template "brush" used when clicking the piano roll
@@ -266,21 +262,6 @@ interface AppState {
     patch: Partial<Omit<TimelineSection, 'id'>>
   ) => void;
 
-  // groups (corkboard regions)
-  addGroup: (partial?: Partial<Group>) => string;
-  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
-  deleteGroup: (id: string) => void;
-  moveGroup: (
-    id: string,
-    x: number,
-    y: number,
-    /** Members to carry; pinned at drag start so the frame can't collect more. */
-    carry?: { brickIds: string[]; mixIds: string[] }
-  ) => void;
-  resizeGroup: (id: string, w: number, h: number) => void;
-  /** Lay the board out in labelled columns by lineage, mix or tag. */
-  sortBoard: (mode: SortMode) => void;
-
   // selection + batch actions
   setSelection: (sel: { bricks: string[]; mixes: string[] }) => void;
   toggleSelected: (kind: 'brick' | 'mix', id: string, additive: boolean) => void;
@@ -338,7 +319,6 @@ export const useStore = create<AppState>()(
       activeMixId: null,
       linking: null,
       timeline: [],
-      groups: [],
       presets: [],
       templates: [],
       activeBrush: null,
@@ -594,75 +574,6 @@ export const useStore = create<AppState>()(
           ),
         })),
 
-      addGroup: (partial) => {
-        const s = useStore.getState();
-        const group: Group = {
-          id: nanoid(8),
-          name: `Group ${s.groups.length + 1}`,
-          color: MIX_COLORS[s.groups.length % MIX_COLORS.length],
-          board: { x: 60, y: 60, w: 520, h: 340 },
-          notes: '',
-          ...partial,
-        };
-        set((st) => ({ groups: [...st.groups, group] }));
-        return group.id;
-      },
-
-      updateGroup: (id, patch) =>
-        set((s) => ({
-          groups: s.groups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
-        })),
-
-      deleteGroup: (id) =>
-        set((s) => ({ groups: s.groups.filter((g) => g.id !== id) })),
-
-      /**
-       * Moving a frame carries whatever sits inside it. `carryIds` pins that
-       * set for the whole drag — recomputing it per frame made the group
-       * scoop up every card it swept over while you were tidying the board.
-       */
-      moveGroup: (id, x, y, carry) => {
-        const s = useStore.getState();
-        const g = s.groups.find((gg) => gg.id === id);
-        if (!g) return;
-        const dx = x - g.board.x;
-        const dy = y - g.board.y;
-        const brickIds = new Set(
-          carry?.brickIds ?? bricksInGroup(g, s.bricks).map((b) => b.id)
-        );
-        const mixIds = new Set(
-          carry?.mixIds ?? mixesInGroup(g, s.mixes).map((m) => m.id)
-        );
-        set((st) => ({
-          groups: st.groups.map((gg) =>
-            gg.id === id ? { ...gg, board: { ...gg.board, x, y } } : gg
-          ),
-          bricks: st.bricks.map((b) =>
-            brickIds.has(b.id)
-              ? {
-                  ...b,
-                  board: {
-                    ...b.board,
-                    x: Math.max(0, b.board.x + dx),
-                    y: Math.max(0, b.board.y + dy),
-                  },
-                }
-              : b
-          ),
-          mixes: st.mixes.map((m) =>
-            mixIds.has(m.id)
-              ? {
-                  ...m,
-                  board: {
-                    x: Math.max(0, m.board.x + dx),
-                    y: Math.max(0, m.board.y + dy),
-                  },
-                }
-              : m
-          ),
-        }));
-      },
-
       setSelection: (sel) => set({ selection: sel }),
 
       toggleSelected: (kind, id, additive) =>
@@ -794,57 +705,6 @@ export const useStore = create<AppState>()(
                 : s.editorOpen,
           };
         }),
-
-      sortBoard: (mode) =>
-        set((s) => {
-          const { positions, frames } = arrangeBoard(s.bricks, s.mixes, mode);
-          // reuse frames from a previous sort so re-running doesn't pile up
-          const byKey = new Map(
-            s.groups.filter((g) => g.autoKey).map((g) => [g.autoKey!, g])
-          );
-          const wanted = new Set(frames.map((f) => f.autoKey));
-          const kept = s.groups.filter((g) => !g.autoKey);
-          const autos = frames.map((f) => {
-            const existing = byKey.get(f.autoKey);
-            return existing
-              ? { ...existing, name: f.name, color: f.color, board: f.board }
-              : {
-                  id: nanoid(8),
-                  name: f.name,
-                  color: f.color,
-                  autoKey: f.autoKey,
-                  board: f.board,
-                  notes: '',
-                };
-          });
-          // drop auto frames from an earlier sort that no longer apply
-          void wanted;
-          return {
-            bricks: s.bricks.map((b) =>
-              positions[b.id]
-                ? { ...b, board: { ...b.board, ...positions[b.id] } }
-                : b
-            ),
-            // frames render behind cards, so put them first
-            groups: [...autos, ...kept],
-          };
-        }),
-
-      resizeGroup: (id, w, h) =>
-        set((s) => ({
-          groups: s.groups.map((g) =>
-            g.id === id
-              ? {
-                  ...g,
-                  board: {
-                    ...g.board,
-                    w: Math.max(160, w),
-                    h: Math.max(120, h),
-                  },
-                }
-              : g
-          ),
-        })),
 
       savePreset: (brickId, name) => {
         const s = useStore.getState();
@@ -1074,7 +934,6 @@ export const useStore = create<AppState>()(
               mixes?: Mix[];
               activeMixId?: string | null;
               templates?: PhraseTemplate[];
-              groups?: Group[];
               presets?: InstrumentPreset[];
               activeBrush?: string | null;
             }
@@ -1118,7 +977,8 @@ export const useStore = create<AppState>()(
           state.templates = state.templates ?? [];
           state.activeBrush = null;
         }
-        state.groups = state.groups ?? [];
+        // v10: groups/board-sort removed — drop them from old saves
+        delete (state as { groups?: unknown }).groups;
         state.presets = state.presets ?? [];
         return state as never;
       },
@@ -1138,7 +998,6 @@ export const useStore = create<AppState>()(
         noteLength: s.noteLength,
         masterVolume: s.masterVolume,
         timeline: s.timeline,
-        groups: s.groups,
         presets: s.presets,
       }),
     }

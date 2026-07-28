@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from './store';
 import { engine } from './audio/engine';
 import { mixAllItems } from './lib/mix';
-import { bricksInGroup } from './lib/groups';
 import {
   onNoteOn,
   onNoteOff,
@@ -23,7 +22,7 @@ export function useRecorder(brickId: string) {
   const [countIn, setCountIn] = useState(true);
   const [quantizeInput, setQuantizeInput] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
-  /** What to play alongside while recording: null, `mix:<id>` or `group:<id>`. */
+  /** What to play alongside while recording: null or `mix:<id>`. */
   const [backing, setBacking] = useState<string | null>(null);
   const [metronome, setMetronome] = useState(false);
   const [held, setHeld] = useState<number[]>([]);
@@ -150,27 +149,17 @@ export function useRecorder(brickId: string) {
       setRecording(true);
 
       // loop the brick so you can hear what you're playing against, plus any
-      // chosen backing (a mix or a board group) so you can play along to it
+      // chosen backing mix so you can play along to it
       const items: Parameters<typeof engine.play>[0] = [
         { brick, loop: true, gain: 0.9 },
       ];
       if (backing) {
-        const [kind, id] = backing.split(':');
-        if (kind === 'mix') {
-          const mix = st.mixes.find((m) => m.id === id);
-          if (mix) {
-            for (const it of mixAllItems(mix, st.bricks)) {
-              // the brick being recorded is already in the list
-              if (it.brick.id !== brick.id) items.push({ ...it, loop: true });
-            }
-          }
-        } else {
-          const group = st.groups.find((g) => g.id === id);
-          if (group) {
-            for (const b of bricksInGroup(group, st.bricks)) {
-              if (b.id !== brick.id)
-                items.push({ brick: b, loop: true, gain: 0.75 });
-            }
+        const id = backing.split(':')[1];
+        const mix = st.mixes.find((m) => m.id === id);
+        if (mix) {
+          for (const it of mixAllItems(mix, st.bricks)) {
+            // the brick being recorded is already in the list
+            if (it.brick.id !== brick.id) items.push({ ...it, loop: true });
           }
         }
       }

@@ -29,14 +29,13 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const [menu, setMenu] = useState<null | 'main' | 'mix' | 'parent'>(null);
   const d = brick.display;
   const playhead = useBrickPlayhead(brick.id);
-  const groups = useStore((s) => s.groups);
   const allBricks = useStore((s) => s.bricks);
   const isSelected = useStore((s) => s.selection.bricks.includes(brick.id));
   const toggleSelected = useStore((s) => s.toggleSelected);
   // tag lookup parses #hashtags with a regex, so don't redo it every render
   const myTags = useMemo(
-    () => tagsForBrick(brick, mixes, groups, allBricks),
-    [brick, mixes, groups, allBricks]
+    () => tagsForBrick(brick, mixes, allBricks),
+    [brick, mixes, allBricks]
   );
   const matches = matchesTags(myTags, activeTags);
   const filtering = activeTags.length > 0;

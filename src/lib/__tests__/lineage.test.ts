@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { descendantIds, familyIds } from '../lineage';
+import {
+  descendantIds,
+  familyIds,
+  rootOf,
+  lineageRoots,
+  reparentAfterDelete,
+} from '../lineage';
 import { testBrick } from './fixtures';
 
 // root -> child -> grandchild, plus a sibling of child, plus an unrelated brick
@@ -51,5 +57,79 @@ describe('familyIds', () => {
   it('ignores parent links pointing at deleted bricks', () => {
     const orphan = testBrick({ parentId: 'deleted' });
     expect(familyIds([orphan], orphan.id)).toEqual(new Set([orphan.id]));
+  });
+});
+
+describe('rootOf', () => {
+  it('returns the brick itself when it has no parent', () => {
+    const a = testBrick();
+    expect(rootOf([a], a.id)).toBe(a.id);
+  });
+
+  it('walks up a chain to the top', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const c = testBrick({ parentId: b.id });
+    expect(rootOf([a, b, c], c.id)).toBe(a.id);
+  });
+
+  it('treats a missing parent as the top', () => {
+    const orphan = testBrick({ parentId: 'gone' });
+    expect(rootOf([orphan], orphan.id)).toBe(orphan.id);
+  });
+
+  it('terminates on a cycle rather than hanging', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const cyclic = [{ ...a, parentId: b.id }, b];
+    expect(() => rootOf(cyclic, b.id)).not.toThrow();
+  });
+});
+
+describe('lineageRoots', () => {
+  it('ignores bricks that stand alone', () => {
+    const a = testBrick();
+    const b = testBrick();
+    expect(lineageRoots([a, b])).toHaveLength(0);
+  });
+
+  it('reports the root of a real lineage', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    expect(lineageRoots([a, b]).map((x) => x.id)).toEqual([a.id]);
+  });
+});
+
+describe('reparentAfterDelete', () => {
+  it('adopts orphans to the grandparent when a middle link goes', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const c = testBrick({ parentId: b.id });
+    const out = reparentAfterDelete([a, b, c], new Set([b.id]));
+    expect(out.map((x) => x.id)).toEqual([a.id, c.id]);
+    expect(out.find((x) => x.id === c.id)!.parentId).toBe(a.id);
+  });
+
+  it('skips past a whole run of deleted ancestors', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const c = testBrick({ parentId: b.id });
+    const d = testBrick({ parentId: c.id });
+    const out = reparentAfterDelete([a, b, c, d], new Set([b.id, c.id]));
+    expect(out.find((x) => x.id === d.id)!.parentId).toBe(a.id);
+  });
+
+  it('orphans a child when the whole line above it is deleted', () => {
+    const a = testBrick();
+    const b = testBrick({ parentId: a.id });
+    const out = reparentAfterDelete([a, b], new Set([a.id]));
+    expect(out.find((x) => x.id === b.id)!.parentId).toBeNull();
+  });
+
+  it('leaves untouched bricks as the same objects', () => {
+    const a = testBrick();
+    const b = testBrick();
+    const out = reparentAfterDelete([a, b], new Set([b.id]));
+    expect(out[0]).toBe(a);
   });
 });
