@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { notatable, layoutSheet } from '../notation';
+import { notatable, layoutSheet, beamUnitFor } from '../notation';
 import { testBrick, testNote } from './fixtures';
 
 describe('notatable', () => {
@@ -152,5 +152,100 @@ describe('layoutSheet', () => {
     });
     const n = layoutSheet(b).events.find((e) => e.kind === 'note')!;
     expect(n.heads[0].accidental).toBe('♮');
+  });
+});
+
+describe('beaming', () => {
+  const eighths = (starts: number[]) =>
+    starts.map((st) => testNote({ start: st, duration: 0.5, pitch: 64 }));
+
+  it('beams two eighths sharing a beat', () => {
+    const b = testBrick({ lengthBeats: 4, notes: eighths([0, 0.5]) });
+    const lay = layoutSheet(b);
+    expect(lay.beams).toHaveLength(1);
+    expect(lay.beams[0].eventIndices).toHaveLength(2);
+    // beamed notes carry the id and drop their flags
+    for (const i of lay.beams[0].eventIndices) {
+      expect(lay.events[i].beamId).toBe(lay.beams[0].id);
+    }
+  });
+
+  it('does not beam across a beat boundary', () => {
+    // second eighth of beat 1 and first of beat 2 are separate groups
+    const b = testBrick({ lengthBeats: 4, notes: eighths([0.5, 1]) });
+    expect(layoutSheet(b).beams).toHaveLength(0);
+  });
+
+  it('leaves a lone eighth with its flag', () => {
+    const b = testBrick({ lengthBeats: 4, notes: eighths([0]) });
+    const lay = layoutSheet(b);
+    expect(lay.beams).toHaveLength(0);
+    expect(lay.events.find((e) => e.kind === 'note')!.beamId).toBeNull();
+  });
+
+  it('a rest breaks the run', () => {
+    // eighth, gap, eighth — all inside beat 1, but not contiguous
+    const b = testBrick({
+      lengthBeats: 4,
+      notes: [
+        testNote({ start: 0, duration: 0.25, pitch: 64 }),
+        testNote({ start: 0.75, duration: 0.25, pitch: 64 }),
+      ],
+    });
+    expect(layoutSheet(b).beams).toHaveLength(0);
+  });
+
+  it('gives every note in a group one stem direction', () => {
+    // one note low, one high — they must still agree
+    const b = testBrick({
+      lengthBeats: 4,
+      notes: [
+        testNote({ start: 0, duration: 0.5, pitch: 55 }),
+        testNote({ start: 0.5, duration: 0.5, pitch: 84 }),
+      ],
+    });
+    const lay = layoutSheet(b);
+    const dirs = lay.beams[0].eventIndices.map((i) => lay.events[i].stemUp);
+    expect(new Set(dirs).size).toBe(1);
+  });
+
+  it('beams four sixteenths within one beat', () => {
+    const b = testBrick({
+      lengthBeats: 4,
+      notes: [0, 0.25, 0.5, 0.75].map((st) =>
+        testNote({ start: st, duration: 0.25, pitch: 64 })
+      ),
+    });
+    const lay = layoutSheet(b);
+    expect(lay.beams).toHaveLength(1);
+    expect(lay.beams[0].eventIndices).toHaveLength(4);
+  });
+
+  it('never beams quarters or longer', () => {
+    const b = testBrick({
+      lengthBeats: 4,
+      notes: [
+        testNote({ start: 0, duration: 1 }),
+        testNote({ start: 1, duration: 1 }),
+      ],
+    });
+    expect(layoutSheet(b).beams).toHaveLength(0);
+  });
+});
+
+describe('beamUnitFor', () => {
+  it('uses the quarter in simple meters', () => {
+    expect(beamUnitFor(4, 4)).toBe(1);
+    expect(beamUnitFor(3, 4)).toBe(1);
+  });
+
+  it('groups compound meters in threes', () => {
+    expect(beamUnitFor(6, 8)).toBe(1.5);
+    expect(beamUnitFor(9, 8)).toBe(1.5);
+    expect(beamUnitFor(12, 8)).toBe(1.5);
+  });
+
+  it('treats an irregular eighth meter as simple', () => {
+    expect(beamUnitFor(7, 8)).toBe(1);
   });
 });

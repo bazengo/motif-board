@@ -140,6 +140,15 @@ export interface LaidEvent {
   stemUp: boolean;
   /** Tied to the next event (a split across a barline). */
   tieToNext: boolean;
+  /** Beam this note belongs to, or null to draw a flag instead. */
+  beamId: number | null;
+}
+
+export interface Beam {
+  id: number;
+  /** Indices into SheetLayout.events, in time order. */
+  eventIndices: number[];
+  stemUp: boolean;
 }
 
 export interface SheetLayout {
@@ -151,6 +160,7 @@ export interface SheetLayout {
   totalBeats: number;
   barlines: number[]; // beat positions
   events: LaidEvent[];
+  beams: Beam[];
 }
 
 const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
@@ -250,6 +260,7 @@ export function layoutSheet(brick: Brick): SheetLayout {
         heads: [],
         stemUp: true,
         tieToNext: false,
+        beamId: null,
       });
     }
   };
@@ -297,6 +308,7 @@ export function layoutSheet(brick: Brick): SheetLayout {
         heads,
         stemUp: meanStep < 4, // middle line = step 4
         tieToNext: pi < pieces.length - 1,
+        beamId: null,
       });
     }
     cursor = g.start + dur;
@@ -306,5 +318,81 @@ export function layoutSheet(brick: Brick): SheetLayout {
   const barlines: number[] = [];
   for (let b = barBeats; b <= totalBeats + EPS; b += barBeats) barlines.push(b);
 
-  return { clef, keySig, timeSig: { num, den }, barBeats, totalBeats, barlines, events };
+  const beams = buildBeams(events, num, den);
+
+  return {
+    clef,
+    keySig,
+    timeSig: { num, den },
+    barBeats,
+    totalBeats,
+    barlines,
+    events,
+    beams,
+  };
+}
+
+// ---------- beaming ----------
+
+const BEAMABLE = new Set(['8', '16']);
+
+/**
+ * The span notes are beamed within. Simple meters beam by the quarter-note
+ * beat; compound ones (6/8, 9/8, 12/8) group in threes, so the unit is a
+ * dotted quarter. Beaming only within the beat is the conservative rule —
+ * it's never wrong, where beaming across beats sometimes is.
+ */
+export function beamUnitFor(num: number, den: number): number {
+  if (den === 8 && num % 3 === 0) return 1.5;
+  return 1;
+}
+
+/**
+ * Collect runs of flagged notes into beam groups. A run breaks on a rest, a
+ * non-flagged value, or a beat boundary — and a lone note never beams, it
+ * keeps its flag. Every note in a group shares one stem direction, decided by
+ * the group's average position, because a beam can't have stems both ways.
+ */
+export function buildBeams(
+  events: LaidEvent[],
+  num: number,
+  den: number
+): Beam[] {
+  const unit = beamUnitFor(num, den);
+  const beams: Beam[] = [];
+  let run: number[] = [];
+  let runUnit = -1;
+  let nextId = 1;
+
+  const flush = () => {
+    if (run.length >= 2) {
+      const id = nextId++;
+      const steps = run.flatMap((i) => events[i].heads.map((h) => h.step));
+      const mean = steps.reduce((a, c) => a + c, 0) / steps.length;
+      const stemUp = mean < 4;
+      for (const i of run) {
+        events[i].beamId = id;
+        events[i].stemUp = stemUp;
+      }
+      beams.push({ id, eventIndices: [...run], stemUp });
+    }
+    run = [];
+  };
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.kind !== 'note' || !BEAMABLE.has(e.base)) {
+      flush();
+      runUnit = -1;
+      continue;
+    }
+    const u = Math.floor(e.startBeat / unit + EPS);
+    if (u !== runUnit) {
+      flush();
+      runUnit = u;
+    }
+    run.push(i);
+  }
+  flush();
+  return beams;
 }
