@@ -943,7 +943,7 @@ export const useStore = create<AppState>()(
         state.bricks = (state.bricks ?? []).map((b) => ({
           ...b,
           parentId: b.parentId ?? null,
-          display: b.display ?? { ...DEFAULT_DISPLAY },
+          display: { ...DEFAULT_DISPLAY, ...(b.display ?? {}) },
           timeSig: b.timeSig ?? { num: 4, den: 4 },
           percussion: b.percussion ?? false,
           envelope: b.envelope ?? { ...DEFAULT_ENVELOPE },

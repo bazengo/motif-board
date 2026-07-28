@@ -1960,3 +1960,76 @@
   font-size: 11px;
   margin-top: 8px;
 }
+
+/* ---------- Sheet-music preview ---------- */
+.sheet-preview {
+  display: block;
+  background: #fffdf5;
+  border-radius: 4px;
+}
+.sheet-line {
+  stroke: #4a4438;
+  stroke-width: 0.8;
+}
+.sheet-bar {
+  stroke: #4a4438;
+  stroke-width: 1;
+}
+.sheet-clef {
+  font-size: 26px;
+  fill: #23252b;
+}
+.sheet-clef.bass {
+  font-size: 20px;
+}
+.sheet-time {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #23252b;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-acc {
+  font-size: 9px;
+  fill: #23252b;
+}
+.sheet-head {
+  fill: #23252b;
+}
+.sheet-head.hollow {
+  fill: #fffdf5;
+  stroke: #23252b;
+  stroke-width: 1.1;
+}
+.sheet-stem {
+  stroke: #23252b;
+  stroke-width: 1;
+}
+.sheet-flag {
+  stroke: #23252b;
+  stroke-width: 1.1;
+  fill: none;
+}
+.sheet-dot {
+  fill: #23252b;
+}
+.sheet-tie {
+  stroke: #23252b;
+  stroke-width: 0.9;
+  fill: none;
+}
+.sheet-resthang {
+  fill: #23252b;
+}
+.sheet-restq {
+  stroke: #23252b;
+  stroke-width: 1.2;
+  fill: none;
+}
+.sheet-unsupported {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+}

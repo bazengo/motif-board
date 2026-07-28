@@ -217,22 +217,6 @@ export function BrickEditor() {
             <span className="unit">beats</span>
           </label>
 
-          <label className="fld">
-            Sound
-            <select
-              value={brick.instrument}
-              onChange={(e) =>
-                updateBrick(brick.id, { instrument: e.target.value as never })
-              }
-            >
-              {INSTRUMENTS.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <label className="fld percussion-fld" title="Drum brick: roll rows become GM drum sounds and MIDI goes out on channel 10">
             Mode
             <label className="audition-toggle">

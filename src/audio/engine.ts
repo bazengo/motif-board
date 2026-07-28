@@ -13,6 +13,7 @@ import { evaluateAutomation, hasAutomation, sortPoints } from '../lib/automation
 import { getSelectedOutput } from './midi-out';
 import { DRUM_CHANNEL } from '../lib/drums';
 import { DrumKit } from './drumkit';
+import { notify } from '../lib/notify';
 import type { ScheduledNote } from '../lib/timeline';
 
 // Convert a MIDI pitch to a note name Tone understands ("C4", "F#5", ...).
@@ -133,6 +134,13 @@ function makeSynth(
         },
         baseUrl: 'https://tonejs.github.io/audio/salamander/',
         release: 1,
+        onerror: () => {
+          notify(
+            'warn',
+            'Piano samples could not load (offline?). The piano will be silent — pick a synth voice instead.',
+            9000
+          );
+        },
       });
     case 'fm':
       return new Tone.PolySynth(Tone.FMSynth, { envelope: { ...env } });

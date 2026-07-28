@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
-import { exportBrick } from '../lib/midi';
 import { MiniRoll } from './MiniRoll';
+import { SheetPreview } from './SheetPreview';
 import { CARD_W, CARD_H, MIX_W } from '../layout';
 import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
 import { clientToBoard } from '../lib/boardCoords';
@@ -13,7 +13,6 @@ import { STICKY_COLORS, INSTRUMENTS } from '../types';
 export function BrickCard({ brick }: { brick: Brick }) {
   const updateBrick = useStore((s) => s.updateBrick);
   const deleteBrick = useStore((s) => s.deleteBrick);
-  const duplicateBrick = useStore((s) => s.duplicateBrick);
   const branchBrick = useStore((s) => s.branchBrick);
   const setParent = useStore((s) => s.setParent);
   const releaseChildren = useStore((s) => s.releaseChildren);
@@ -223,6 +222,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
         <div className="brick-handle-actions">
           <button
             className="icon-btn link-handle"
+            aria-label="Drag to a mix to add or remove this card"
             title="Drag onto a mix to add this brick (or off it to detach) — drop on empty board to start a new mix"
             onPointerDown={(e) => startLink(e, 'mix')}
           >
@@ -230,6 +230,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
           </button>
           <button
             className="icon-btn branch-handle"
+            aria-label="Drag out to create an iteration of this card"
             title="Drag to empty space to spawn an iteration — or onto another brick to adopt it as a child"
             onPointerDown={(e) => startLink(e, 'branch')}
           >
@@ -274,6 +275,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
               ['showLyrics', 'Lyrics'],
               ['showNotes', 'Description'],
               ['preview', 'Piano-roll preview'],
+              ['sheet', 'Sheet music'],
             ] as [keyof BrickDisplay, string][]
           ).map(([key, label]) => (
             <label className="menu-check" key={key}>
@@ -297,12 +299,6 @@ export function BrickCard({ brick }: { brick: Brick }) {
             }}
           >
             Branch (new iteration)
-          </button>
-          <button onClick={() => { duplicateBrick(brick.id); setMenu(null); }}>
-            Duplicate
-          </button>
-          <button onClick={() => { exportBrick(brick); setMenu(null); }}>
-            Export MIDI
           </button>
           <button className="danger" onClick={() => deleteBrick(brick.id)}>
             Delete
@@ -394,6 +390,11 @@ export function BrickCard({ brick }: { brick: Brick }) {
       {d.preview && (
         <div className="brick-preview">
           <MiniRoll brick={brick} progress={playhead?.progress ?? null} />
+        </div>
+      )}
+      {d.sheet && (
+        <div className="brick-preview">
+          <SheetPreview brick={brick} />
         </div>
       )}
 

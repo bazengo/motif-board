@@ -17,6 +17,9 @@ import { BrickEditor } from './components/BrickEditor';
 import { MidiSelector } from './components/MidiSelector';
 import { TimelineStrip } from './components/TimelineStrip';
 import { TagBar } from './components/TagBar';
+import { onStorageError } from './lib/debouncedStorage';
+import { notify, onNotice, type Notice } from './lib/notify';
+import { isMidiSupported } from './audio/midi-out';
 import './styles.css';
 
 function App() {
@@ -33,6 +36,37 @@ function App() {
   useEffect(() => engine.setMasterVolume(masterVolume), [masterVolume]);
 
   const [playing, setPlaying] = useState(false);
+  const [notices, setNotices] = useState<Notice[]>([]);
+
+  // one queue for storage failures, engine warnings and undo toasts
+  useEffect(() => {
+    const off = onNotice((n) => {
+      setNotices((cur) => [...cur.filter((c) => c.message !== n.message), n]);
+      if (n.ttl > 0)
+        setTimeout(
+          () => setNotices((cur) => cur.filter((c) => c.id !== n.id)),
+          n.ttl
+        );
+    });
+    const offStorage = onStorageError((msg) => notify('error', msg, 0));
+    return () => {
+      off();
+      offStorage();
+    };
+  }, []);
+
+  // one-time browser capability note — the app runs everywhere, but Web MIDI
+  // (Kontakt routing, MIDI keyboards) is Chromium-only
+  useEffect(() => {
+    if (!isMidiSupported() && !localStorage.getItem('mb.browser-note')) {
+      localStorage.setItem('mb.browser-note', '1');
+      notify(
+        'info',
+        'This browser has no Web MIDI, so MIDI keyboards and routing to external instruments (e.g. Kontakt) are unavailable. Everything else works — for MIDI features use Chrome or Edge.',
+        12000
+      );
+    }
+  }, []);
   const [, forceHistory] = useState(0);
   const midiFileRef = useRef<HTMLInputElement | null>(null);
   const projFileRef = useRef<HTMLInputElement | null>(null);
@@ -96,7 +130,9 @@ function App() {
         if (st.editorOpen) return;
         if (st.selection.bricks.length + st.selection.mixes.length === 0) return;
         e.preventDefault();
+        const n = st.selection.bricks.length + st.selection.mixes.length;
         st.deleteSelection();
+        notify('info', `Deleted ${n} item${n === 1 ? '' : 's'} — Ctrl+Z to undo`);
       }
     }
     window.addEventListener('keydown', onKey);
@@ -235,6 +271,25 @@ function App() {
           <Inspector />
         </aside>
       </div>
+
+      {notices.length > 0 && (
+        <div className="notice-stack">
+          {notices.map((n) => (
+            <div key={n.id} className={`notice notice-${n.kind}`} role="status">
+              <span>{n.message}</span>
+              <button
+                className="notice-x"
+                aria-label="Dismiss"
+                onClick={() =>
+                  setNotices((cur) => cur.filter((c) => c.id !== n.id))
+                }
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {editorOpen && <BrickEditor />}
     </div>

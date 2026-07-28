@@ -40,6 +40,7 @@ export interface BrickDisplay {
   showLyrics: boolean;
   showNotes: boolean; // process notes / description
   preview: boolean; // mini piano-roll preview
+  sheet: boolean; // engraved sheet-music preview
 }
 
 export const DEFAULT_DISPLAY: BrickDisplay = {
@@ -47,6 +48,7 @@ export const DEFAULT_DISPLAY: BrickDisplay = {
   showLyrics: true,
   showNotes: false,
   preview: false,
+  sheet: false,
 };
 
 /** A reusable musical phrase used as the piano-roll "brush". Notes are stored
