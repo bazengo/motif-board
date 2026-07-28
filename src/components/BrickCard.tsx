@@ -3,6 +3,7 @@ import { useStore, descendantIds } from '../store';
 import { engine } from '../audio/engine';
 import { MiniRoll } from './MiniRoll';
 import { SheetPreview } from './SheetPreview';
+import { SHEET_FONTS } from '../lib/smufl';
 import { CARD_W, CARD_H, MIX_W } from '../layout';
 import { tagsForBrick, matchesTags, stripHashtags } from '../lib/tags';
 import { clientToBoard } from '../lib/boardCoords';
@@ -31,6 +32,8 @@ export function BrickCard({ brick }: { brick: Brick }) {
   const allBricks = useStore((s) => s.bricks);
   const isSelected = useStore((s) => s.selection.bricks.includes(brick.id));
   const toggleSelected = useStore((s) => s.toggleSelected);
+  const sheetFont = useStore((s) => s.sheetFont);
+  const setSheetFont = useStore((s) => s.setSheetFont);
   // tag lookup parses #hashtags with a regex, so don't redo it every render
   const myTags = useMemo(
     () => tagsForBrick(brick, mixes, allBricks),
@@ -288,6 +291,20 @@ export function BrickCard({ brick }: { brick: Brick }) {
             </label>
           ))}
 
+          {d.sheet && (
+            <div className="menu-seg" title="Engraving style (applies everywhere)">
+              {SHEET_FONTS.map((f) => (
+                <button
+                  key={f.id}
+                  className={'seg-btn' + (sheetFont === f.id ? ' on' : '')}
+                  onClick={() => setSheetFont(f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="menu-divider" />
           <button onClick={() => setMenu('mix')}>➕ Add to mix ▸</button>
           <button onClick={() => setMenu('parent')}>🌱 Lineage ▸</button>
@@ -394,7 +411,7 @@ export function BrickCard({ brick }: { brick: Brick }) {
       )}
       {d.sheet && (
         <div className="brick-preview">
-          <SheetPreview brick={brick} />
+          <SheetPreview brick={brick} font={sheetFont} />
         </div>
       )}
 

@@ -1,0 +1,9 @@
+Bravura and Petaluma are music fonts by Steinberg Media Technologies GmbH,
+released under the SIL Open Font License 1.1.
+
+  https://github.com/steinbergmedia/bravura
+  https://github.com/steinbergmedia/petaluma
+  https://scripts.sil.org/OFL
+
+They implement SMuFL (Standard Music Font Layout). Extracted here from the
+vexflow npm package, which embeds the same woff2 data.

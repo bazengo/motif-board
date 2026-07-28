@@ -1962,67 +1962,44 @@
 }
 
 /* ---------- Sheet-music preview ---------- */
+/* Bravura / Petaluma are SMuFL music fonts (SIL OFL) — see public/fonts.
+   font-display: block avoids a flash of fallback boxes, and the browser only
+   fetches them when a sheet preview is actually on screen. */
+@font-face {
+  font-family: 'Bravura';
+  src: url('/fonts/Bravura.woff2') format('woff2');
+  font-display: block;
+}
+@font-face {
+  font-family: 'Petaluma';
+  src: url('/fonts/Petaluma.woff2') format('woff2');
+  font-display: block;
+}
 .sheet-preview {
   display: block;
-  background: #fffdf5;
+  background: transparent;
   border-radius: 4px;
+  overflow: visible;
 }
 .sheet-line {
-  stroke: #4a4438;
-  stroke-width: 0.8;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.7;
 }
 .sheet-bar {
-  stroke: #4a4438;
+  stroke: rgba(0, 0, 0, 0.7);
   stroke-width: 1;
 }
-.sheet-clef {
-  font-size: 26px;
-  fill: #23252b;
-}
-.sheet-clef.bass {
-  font-size: 20px;
-}
-.sheet-time {
-  font-size: 9px;
-  font-weight: 700;
-  fill: #23252b;
-  font-variant-numeric: tabular-nums;
-}
-.sheet-acc {
-  font-size: 9px;
-  fill: #23252b;
-}
-.sheet-head {
-  fill: #23252b;
-}
-.sheet-head.hollow {
-  fill: #fffdf5;
-  stroke: #23252b;
-  stroke-width: 1.1;
+.sheet-glyph {
+  fill: #1b1d22;
+  dominant-baseline: alphabetic;
 }
 .sheet-stem {
-  stroke: #23252b;
-  stroke-width: 1;
-}
-.sheet-flag {
-  stroke: #23252b;
+  stroke: #1b1d22;
   stroke-width: 1.1;
-  fill: none;
-}
-.sheet-dot {
-  fill: #23252b;
 }
 .sheet-tie {
-  stroke: #23252b;
+  stroke: #1b1d22;
   stroke-width: 0.9;
-  fill: none;
-}
-.sheet-resthang {
-  fill: #23252b;
-}
-.sheet-restq {
-  stroke: #23252b;
-  stroke-width: 1.2;
   fill: none;
 }
 .sheet-unsupported {
@@ -2032,4 +2009,26 @@
   background: rgba(0, 0, 0, 0.08);
   border-radius: 4px;
   padding: 6px 8px;
+}
+
+/* segmented control inside a card menu (engraving style) */
+.menu-seg {
+  display: flex;
+  gap: 2px;
+  margin: 4px 6px 2px;
+}
+.seg-btn {
+  flex: 1;
+  background: #1c212b;
+  border: 1px solid #3a4150;
+  color: #b7bfce;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 3px 4px;
+}
+.seg-btn.on {
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #23252b;
+  font-weight: 700;
 }

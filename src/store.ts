@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import { descendantIds, familyIds, reparentAfterDelete } from './lib/lineage';
 import { debouncedStorage } from './lib/debouncedStorage';
+import type { SheetFontId } from './lib/smufl';
 import { presetFromBrick, presetPatch } from './lib/presets';
 import {
   type Brick,
@@ -208,6 +209,8 @@ interface AppState {
   noteLength: number;
   /** Overall output level, 0..1. */
   masterVolume: number;
+  /** Engraving style for sheet previews. */
+  sheetFont: SheetFontId;
 
   // brick CRUD
   addBrick: (partial?: Partial<Brick>) => string;
@@ -297,6 +300,7 @@ interface AppState {
   setEditorLoop: (v: boolean) => void;
   setNoteLength: (v: number) => void;
   setMasterVolume: (v: number) => void;
+  setSheetFont: (v: SheetFontId) => void;
   copyNotes: (brickId: string, noteIds: string[], cut?: boolean) => void;
   pasteNotes: (brickId: string) => string[];
   quantize: (brickId: string, noteIds: string[] | null, grid: number) => void;
@@ -333,6 +337,7 @@ export const useStore = create<AppState>()(
       editorLoop: true,
       noteLength: 1,
       masterVolume: 0.9,
+      sheetFont: 'classical',
 
       addBrick: (partial) => {
         const brick = makeBrick(partial);
@@ -818,6 +823,7 @@ export const useStore = create<AppState>()(
       setNoteLength: (v) => set({ noteLength: Math.max(0.0625, v) }),
       setMasterVolume: (v) =>
         set({ masterVolume: Math.max(0, Math.min(1, v)) }),
+      setSheetFont: (v) => set({ sheetFont: v }),
 
       copyNotes: (brickId, noteIds, cut = false) => {
         const s = useStore.getState();
@@ -997,6 +1003,7 @@ export const useStore = create<AppState>()(
         editorLoop: s.editorLoop,
         noteLength: s.noteLength,
         masterVolume: s.masterVolume,
+        sheetFont: s.sheetFont,
         timeline: s.timeline,
         presets: s.presets,
       }),
