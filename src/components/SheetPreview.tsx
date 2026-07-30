@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { notatable, layoutSheet, type LaidEvent } from '../lib/notation';
 import {
   GLYPH,
@@ -16,6 +16,39 @@ const STEP = LINE_GAP / 2; // one diatonic step
 const STAFF_H = LINE_GAP * 4;
 // SMuFL em square = 4 staff spaces, so this sizes glyphs to the staff
 const GLYPH_SIZE = STAFF_H;
+const HEAD_W = LINE_GAP * 1.18; // SMuFL notehead width
+const STEM_LEN = LINE_GAP * 3.5;
+const ACC_COL = LINE_GAP * 1.25; // one accidental column
+const BEAM_TH = LINE_GAP * 0.5;
+const BEAM_GAP = LINE_GAP * 0.78;
+const EPS = 1e-6;
+
+/**
+ * Which column each accidental in a chord sits in, counting leftward from the
+ * notehead. Two accidentals close in pitch can't share a column, so the lower
+ * one steps further left — the conventional zig-zag.
+ */
+function accidentalColumns(e: LaidEvent): {
+  colOf: Map<number, number>;
+  columns: number;
+} {
+  const colOf = new Map<number, number>();
+  const placed: { step: number; col: number }[] = [];
+  // top head first, which is the order engravers work in
+  for (let i = e.heads.length - 1; i >= 0; i--) {
+    if (!e.heads[i].accidental) continue;
+    const step = e.heads[i].step;
+    let col = 0;
+    // an accidental glyph is roughly 3 staff steps tall
+    while (placed.some((p) => p.col === col && Math.abs(p.step - step) < 3)) col++;
+    colOf.set(i, col);
+    placed.push({ step, col });
+  }
+  return {
+    colOf,
+    columns: placed.length ? Math.max(...placed.map((p) => p.col)) + 1 : 0,
+  };
+}
 
 /**
  * Card-sized engraving of a brick, drawn with real SMuFL glyphs (Bravura or
@@ -45,11 +78,12 @@ export function SheetPreview({
   }
 
   const family = familyFor(font);
+  const events = layout.events;
 
   // headroom for ledger lines and stems on both sides
   let minStep = -1;
   let maxStep = 9;
-  for (const e of layout.events) {
+  for (const e of events) {
     for (const h of e.heads) {
       minStep = Math.min(minStep, h.step);
       maxStep = Math.max(maxStep, h.step);
@@ -72,72 +106,45 @@ export function SheetPreview({
   const timeSigW = LINE_GAP * 2.2;
   const preludeW = timeSigX + timeSigW + LINE_GAP * 0.5;
 
-  const pxPerBeat = Math.max(9, (width - preludeW - 6) / layout.totalBeats);
-  const xOf = (beat: number) => preludeW + beat * pxPerBeat;
+  // ---- horizontal spacing ----
+  // Accidentals hang to the LEFT of their notehead, so they need reserved
+  // space; without it they print on top of whatever came before. Each note
+  // that carries one pushes itself (and everything after) right, and the
+  // beat spacing is computed from what's left so the staff still fits.
+  const accCols = events.map(accidentalColumns);
+  const accSpace = accCols.map((a) =>
+    a.columns ? a.columns * ACC_COL + LINE_GAP * 0.2 : 0
+  );
 
-
-  // ---- beam geometry ----
-  // Each beamed note's stem must reach a common straight line. Fit that line
-  // through the first and last note's natural stem ends, clamp the slope so a
-  // wide leap doesn't produce a ski jump, then push the whole line out until
-  // no stem in the group is shorter than it should be.
-  const stemLen = LINE_GAP * 3.5;
-  const headW = LINE_GAP * 1.18;
-  const stemXOf = (e: LaidEvent) =>
-    xOf(e.startBeat) + 3 + (e.stemUp ? headW - 0.5 : 0.5);
-  const extremeStep = (e: LaidEvent) =>
-    e.stemUp
-      ? e.heads[e.heads.length - 1].step
-      : e.heads[0].step;
-
-  const beamLines = new Map<
-    number,
-    { x1: number; y1: number; x2: number; y2: number; stemUp: boolean }
-  >();
-  for (const beam of layout.beams) {
-    const evs = beam.eventIndices.map((i) => layout.events[i]);
-    const xs = evs.map(stemXOf);
-    const reqs = evs.map((e) =>
-      beam.stemUp
-        ? yOf(extremeStep(e)) - stemLen
-        : yOf(extremeStep(e)) + stemLen
-    );
-    const span = xs[xs.length - 1] - xs[0] || 1;
-    let slope = (reqs[reqs.length - 1] - reqs[0]) / span;
-    const MAX_SLOPE = 0.28;
-    slope = Math.max(-MAX_SLOPE, Math.min(MAX_SLOPE, slope));
-    // intercept: stems may be longer than natural, never shorter
-    const cs = reqs.map((r, i) => r - slope * (xs[i] - xs[0]));
-    const c = beam.stemUp ? Math.min(...cs) : Math.max(...cs);
-    beamLines.set(beam.id, {
-      x1: xs[0],
-      y1: c,
-      x2: xs[xs.length - 1],
-      y2: c + slope * span,
-      stemUp: beam.stemUp,
-    });
+  const shiftAt: number[] = [];
+  let running = 0;
+  for (let i = 0; i < events.length; i++) {
+    running += accSpace[i];
+    shiftAt.push(running);
   }
-  const beamYAt = (id: number, x: number) => {
-    const L = beamLines.get(id);
-    if (!L) return null;
-    const t = (x - L.x1) / (L.x2 - L.x1 || 1);
-    return L.y1 + t * (L.y2 - L.y1);
-  };
-  const beamYFor = (eventIndex: number) => {
-    const e = layout.events[eventIndex];
-    if (e.beamId == null) return null;
-    return beamYAt(e.beamId, stemXOf(e));
-  };
 
-  const BEAM_TH = LINE_GAP * 0.5;
-  const BEAM_GAP = LINE_GAP * 0.78;
+  const pxPerBeat = Math.max(
+    9,
+    (width - preludeW - 6 - running) / Math.max(1, layout.totalBeats)
+  );
+  const xs = events.map(
+    (e, i) => preludeW + e.startBeat * pxPerBeat + shiftAt[i]
+  );
+  /** Beat → x, carrying the shift of every event that starts before it. */
+  const xOfBeat = (beat: number) => {
+    let s = 0;
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].startBeat < beat - EPS) s = shiftAt[i];
+      else break;
+    }
+    return preludeW + beat * pxPerBeat + s;
+  };
 
   const glyph = (
     key: string | number,
     x: number,
     y: number,
     text: string,
-    scale = 1,
     cls = 'sheet-glyph'
   ) => (
     <text
@@ -146,11 +153,53 @@ export function SheetPreview({
       y={y}
       className={cls}
       fontFamily={family}
-      fontSize={GLYPH_SIZE * scale}
+      fontSize={GLYPH_SIZE}
     >
       {text}
     </text>
   );
+
+  // ---- beam geometry ----
+  // Each beamed note's stem must reach a common straight line. Fit that line
+  // through the first and last note's natural stem ends, clamp the slope so a
+  // wide leap doesn't produce a ski jump, then push the whole line out until
+  // no stem in the group is shorter than it should be.
+  const stemXOf = (i: number) =>
+    xs[i] + (events[i].stemUp ? HEAD_W - 0.5 : 0.5);
+  const extremeStep = (e: LaidEvent) =>
+    e.stemUp ? e.heads[e.heads.length - 1].step : e.heads[0].step;
+
+  const beamLines = new Map<
+    number,
+    { x1: number; y1: number; x2: number; y2: number }
+  >();
+  for (const beam of layout.beams) {
+    const idx = beam.eventIndices;
+    const bxs = idx.map(stemXOf);
+    const reqs = idx.map((i) =>
+      beam.stemUp
+        ? yOf(extremeStep(events[i])) - STEM_LEN
+        : yOf(extremeStep(events[i])) + STEM_LEN
+    );
+    const span = bxs[bxs.length - 1] - bxs[0] || 1;
+    let slope = (reqs[reqs.length - 1] - reqs[0]) / span;
+    const MAX_SLOPE = 0.28;
+    slope = Math.max(-MAX_SLOPE, Math.min(MAX_SLOPE, slope));
+    const cs = reqs.map((r, k) => r - slope * (bxs[k] - bxs[0]));
+    const c = beam.stemUp ? Math.min(...cs) : Math.max(...cs);
+    beamLines.set(beam.id, {
+      x1: bxs[0],
+      y1: c,
+      x2: bxs[bxs.length - 1],
+      y2: c + slope * span,
+    });
+  }
+  const beamYAt = (id: number, x: number) => {
+    const L = beamLines.get(id);
+    if (!L) return null;
+    const t = (x - L.x1) / (L.x2 - L.x1 || 1);
+    return L.y1 + t * (L.y2 - L.y1);
+  };
 
   return (
     <svg
@@ -192,36 +241,40 @@ export function SheetPreview({
       {layout.barlines.map((b) => (
         <line
           key={b}
-          x1={xOf(b) - 2}
-          x2={xOf(b) - 2}
+          x1={xOfBeat(b) - 2}
+          x2={xOfBeat(b) - 2}
           y1={staffTop}
           y2={staffTop + STAFF_H}
           className="sheet-bar"
         />
       ))}
 
-      {layout.events.map((e, i) =>
+      {events.map((e, i) =>
         e.kind === 'note' ? (
           <NoteGlyph
             key={i}
             e={e}
-            xOf={xOf}
+            x={xs[i]}
+            tieEndX={xOfBeat(e.startBeat + e.beats)}
             yOf={yOf}
             family={family}
             glyph={glyph}
-            beamY={beamYFor(i)}
+            accCol={accCols[i].colOf}
+            beamY={
+              e.beamId == null ? null : beamYAt(e.beamId, stemXOf(i))
+            }
           />
         ) : (
           <g key={i}>
             {glyph(
               `r${i}`,
-              xOf(e.startBeat) + 2,
+              xs[i] + 2,
               // whole rest hangs from the 4th line; the rest sit on the middle
               yOf(e.base === 'w' ? 6 : 4),
               REST_FOR[e.base] ?? GLYPH.restQuarter
             )}
             {e.dotted &&
-              glyph(`rd${i}`, xOf(e.startBeat) + 9, yOf(5), GLYPH.augmentationDot)}
+              glyph(`rd${i}`, xs[i] + 9, yOf(5), GLYPH.augmentationDot)}
           </g>
         )
       )}
@@ -244,21 +297,22 @@ export function SheetPreview({
             points={`${x1},${y1} ${x2},${y2} ${x2},${y2 + BEAM_TH} ${x1},${y1 + BEAM_TH}`}
           />
         );
-        const out = [bar(`b${beam.id}`, L.x1, L.y1, L.x2, L.y2)];
+        const out: ReactNode[] = [bar(`b${beam.id}`, L.x1, L.y1, L.x2, L.y2)];
 
         // secondary beam: full segment between adjacent 16ths, a stub for a
         // 16th that sits alone among eighths
-        const evs = beam.eventIndices.map((i) => layout.events[i]);
-        for (let i = 0; i < evs.length; i++) {
-          if (evs[i].base !== '16') continue;
-          const xHere = stemXOf(evs[i]);
-          const prev16 = i > 0 && evs[i - 1].base === '16';
-          const next16 = i < evs.length - 1 && evs[i + 1].base === '16';
+        const idx = beam.eventIndices;
+        for (let k = 0; k < idx.length; k++) {
+          if (events[idx[k]].base !== '16') continue;
+          const xHere = stemXOf(idx[k]);
+          const prev16 = k > 0 && events[idx[k - 1]].base === '16';
+          const next16 =
+            k < idx.length - 1 && events[idx[k + 1]].base === '16';
           if (next16) {
-            const xNext = stemXOf(evs[i + 1]);
+            const xNext = stemXOf(idx[k + 1]);
             out.push(
               bar(
-                `b${beam.id}s${i}`,
+                `b${beam.id}s${k}`,
                 xHere,
                 (beamYAt(beam.id, xHere) ?? 0) + dir * BEAM_GAP,
                 xNext,
@@ -267,14 +321,15 @@ export function SheetPreview({
             );
           } else if (!prev16) {
             const stub = LINE_GAP * 1.1;
-            const xEnd = i === 0 ? xHere + stub : xHere - stub;
+            const xa = k === 0 ? xHere : xHere - stub;
+            const xb = k === 0 ? xHere + stub : xHere;
             out.push(
               bar(
-                `b${beam.id}h${i}`,
-                Math.min(xHere, xEnd),
-                (beamYAt(beam.id, Math.min(xHere, xEnd)) ?? 0) + dir * BEAM_GAP,
-                Math.max(xHere, xEnd),
-                (beamYAt(beam.id, Math.max(xHere, xEnd)) ?? 0) + dir * BEAM_GAP
+                `b${beam.id}h${k}`,
+                xa,
+                (beamYAt(beam.id, xa) ?? 0) + dir * BEAM_GAP,
+                xb,
+                (beamYAt(beam.id, xb) ?? 0) + dir * BEAM_GAP
               )
             );
           }
@@ -287,14 +342,17 @@ export function SheetPreview({
 
 function NoteGlyph({
   e,
-  xOf,
+  x,
+  tieEndX,
   yOf,
   family,
   glyph,
+  accCol,
   beamY,
 }: {
   e: LaidEvent;
-  xOf: (b: number) => number;
+  x: number;
+  tieEndX: number;
   yOf: (s: number) => number;
   family: string;
   glyph: (
@@ -302,25 +360,21 @@ function NoteGlyph({
     x: number,
     y: number,
     text: string,
-    scale?: number,
     cls?: string
-  ) => React.ReactNode;
+  ) => ReactNode;
+  accCol: Map<number, number>;
   /** When beamed, the y the stem must reach; the beam replaces the flag. */
   beamY: number | null;
 }) {
-  const x = xOf(e.startBeat) + 3;
   const head = NOTEHEAD_FOR[e.base] ?? GLYPH.noteheadBlack;
   const flags = e.base === '8' ? 1 : e.base === '16' ? 2 : 0;
   const top = e.heads[e.heads.length - 1];
   const bottom = e.heads[0];
-  // notehead is ~1.18 staff spaces wide in SMuFL; the stem rides its edge
-  const headW = LINE_GAP * 1.18;
-  const stemX = e.stemUp ? x + headW - 0.5 : x + 0.5;
+  const stemX = e.stemUp ? x + HEAD_W - 0.5 : x + 0.5;
   const stemY1 = e.stemUp ? yOf(bottom.step) : yOf(top.step);
-  const stemLen = LINE_GAP * 3.5; // natural length when not beamed
   const stemY2 =
     beamY ??
-    (e.stemUp ? yOf(top.step) - stemLen : yOf(bottom.step) + stemLen);
+    (e.stemUp ? yOf(top.step) - STEM_LEN : yOf(bottom.step) + STEM_LEN);
 
   return (
     <g>
@@ -333,7 +387,7 @@ function NoteGlyph({
           <line
             key={`${i}-${s}`}
             x1={x - 2.5}
-            x2={x + headW + 2.5}
+            x2={x + HEAD_W + 2.5}
             y1={yOf(s)}
             y2={yOf(s)}
             className="sheet-line"
@@ -346,7 +400,8 @@ function NoteGlyph({
           {h.accidental &&
             glyph(
               `acc${i}`,
-              x - LINE_GAP * 1.5,
+              // column 0 sits nearest the head; further columns step left
+              x - ((accCol.get(i) ?? 0) + 1) * ACC_COL,
               yOf(h.step),
               ACCIDENTAL_FOR[h.accidental] ?? ''
             )}
@@ -354,7 +409,7 @@ function NoteGlyph({
           {e.dotted &&
             glyph(
               `dot${i}`,
-              x + headW + 1.5,
+              x + HEAD_W + 1.5,
               // dots sit in a space, never on a line
               yOf(h.step % 2 === 0 ? h.step + 1 : h.step),
               GLYPH.augmentationDot
@@ -378,7 +433,7 @@ function NoteGlyph({
           y={stemY2}
           className="sheet-glyph"
           fontFamily={family}
-          fontSize={LINE_GAP * 4}
+          fontSize={GLYPH_SIZE}
         >
           {e.stemUp
             ? flags === 1
@@ -393,8 +448,8 @@ function NoteGlyph({
       {e.tieToNext && (
         <path
           d={`M ${x + 2} ${yOf(bottom.step) + (e.stemUp ? 5 : -5)} q ${
-            (xOf(e.startBeat + e.beats) - x) / 2
-          } ${e.stemUp ? 5 : -5}, ${xOf(e.startBeat + e.beats) - x} 0`}
+            (tieEndX - x) / 2
+          } ${e.stemUp ? 5 : -5}, ${tieEndX - x} 0`}
           className="sheet-tie"
         />
       )}
